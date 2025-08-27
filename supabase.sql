@@ -57,7 +57,6 @@ INSERT INTO public.shifts (label, start_time, end_time) VALUES
 ON CONFLICT (label) DO NOTHING;
 
 -- Reglas de cupos
-CREATE TYPE IF NOT EXISTS public.day_kind AS ENUM ('habil','finde_fer','todos'); -- si no existe
 CREATE TABLE IF NOT EXISTS public.vacancy_rules (
   id BIGSERIAL PRIMARY KEY,
   location_id SMALLINT REFERENCES public.locations(id) ON DELETE CASCADE,
@@ -138,7 +137,7 @@ FROM generate_series((now() - interval '30 days')::date, (now() + interval '180 
 CROSS JOIN public.locations l
 CROSS JOIN public.shifts s;
 
--- Estado de vacantes (ocupación real)
+-- Estado de vacantes
 CREATE OR REPLACE VIEW public.vacancy_status AS
 SELECT
   vc.day,
@@ -225,10 +224,10 @@ CREATE POLICY holi_write_admin ON public.holidays FOR ALL USING (
   EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
 );
 
--- === Permisos de lectura a vistas (para usuarios autenticados) ===
+-- Permisos de lectura a las views
 GRANT SELECT ON public.vacancy_capacity, public.vacancy_status TO authenticated;
 
--- === FUNCIÓN para dashboard/calendario (bypass RLS para cómputo agregado) ===
+-- RPC para dashboard/calendario
 CREATE OR REPLACE FUNCTION public.vacancy_status_range(
   start_d date,
   end_d   date,
@@ -236,15 +235,11 @@ CREATE OR REPLACE FUNCTION public.vacancy_status_range(
   shift   text
 )
 RETURNS TABLE(day date, location_id int, shift_label text, cupos int, ocupados int, disponibles int)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT vs.day, vs.location_id, vs.shift_label, vs.cupos, vs.ocupados, vs.disponibles
   FROM public.vacancy_status vs
   WHERE vs.day BETWEEN start_d AND end_d
-    AND (loc  IS NULL OR vs.location_id = loc)
+    AND (loc   IS NULL OR vs.location_id = loc)
     AND (shift IS NULL OR vs.shift_label = shift)
   ORDER BY vs.day, vs.location_id, vs.shift_label;
 $$;
