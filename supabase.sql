@@ -57,6 +57,7 @@ INSERT INTO public.shifts (label, start_time, end_time) VALUES
 ON CONFLICT (label) DO NOTHING;
 
 -- Reglas de cupos
+CREATE TYPE IF NOT EXISTS public.day_kind AS ENUM ('habil','finde_fer','todos'); -- si no existe
 CREATE TABLE IF NOT EXISTS public.vacancy_rules (
   id BIGSERIAL PRIMARY KEY,
   location_id SMALLINT REFERENCES public.locations(id) ON DELETE CASCADE,
@@ -137,7 +138,7 @@ FROM generate_series((now() - interval '30 days')::date, (now() + interval '180 
 CROSS JOIN public.locations l
 CROSS JOIN public.shifts s;
 
--- Estado de vacantes
+-- Estado de vacantes (ocupación real)
 CREATE OR REPLACE VIEW public.vacancy_status AS
 SELECT
   vc.day,
@@ -163,11 +164,11 @@ SELECT
 FROM public.vacancy_capacity vc;
 
 -- RLS
-ALTER TABLE public.profiles      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.availabilities ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.assignments   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.holidays      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.vacancy_rules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.assignments    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.holidays       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vacancy_rules  ENABLE ROW LEVEL SECURITY;
 
 -- Profiles
 DROP POLICY IF EXISTS profiles_self_select ON public.profiles;
@@ -224,6 +225,28 @@ CREATE POLICY holi_write_admin ON public.holidays FOR ALL USING (
   EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
 );
 
--- Permisos de lectura a las views
+-- === Permisos de lectura a vistas (para usuarios autenticados) ===
 GRANT SELECT ON public.vacancy_capacity, public.vacancy_status TO authenticated;
 
+-- === FUNCIÓN para dashboard/calendario (bypass RLS para cómputo agregado) ===
+CREATE OR REPLACE FUNCTION public.vacancy_status_range(
+  start_d date,
+  end_d   date,
+  loc     int,
+  shift   text
+)
+RETURNS TABLE(day date, location_id int, shift_label text, cupos int, ocupados int, disponibles int)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT vs.day, vs.location_id, vs.shift_label, vs.cupos, vs.ocupados, vs.disponibles
+  FROM public.vacancy_status vs
+  WHERE vs.day BETWEEN start_d AND end_d
+    AND (loc  IS NULL OR vs.location_id = loc)
+    AND (shift IS NULL OR vs.shift_label = shift)
+  ORDER BY vs.day, vs.location_id, vs.shift_label;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.vacancy_status_range(date, date, int, text) TO authenticated;
