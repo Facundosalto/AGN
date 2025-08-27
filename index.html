@@ -1,65 +1,151 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CRM Vacantes — Supabase</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<style>
-:root{color-scheme:light}
-body{background:#f7fafc}
-.card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 10px 24px rgba(0,0,0,.06)}
-.chip{display:inline-block;padding:2px 10px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px}
-.tab{cursor:pointer}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRM Vacantes — Supabase</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
-<body class="min-h-screen">
-<div class="max-w-6xl mx-auto p-4 md:p-8">
-<header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-<h1 class="text-2xl font-bold">CRM Vacantes — Supabase</h1>
-<div id="userBox" class="hidden items-center gap-3">
-<span id="userName" class="chip"></span>
-<button id="logoutBtn" class="px-3 py-2 rounded-lg border">Salir</button>
-</div>
-</header>
+<body class="min-h-screen bg-slate-50">
+  <div class="max-w-6xl mx-auto p-4 md:p-8">
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+      <h1 class="text-2xl font-bold">CRM Vacantes — Supabase</h1>
+      <div id="userBox" class="hidden items-center gap-3">
+        <span id="userName" class="chip"></span>
+        <button id="logoutBtn" class="btn">Salir</button>
+      </div>
+    </header>
 
+    <!-- AUTH -->
+    <section id="auth" class="card p-6">
+      <h2 class="text-xl font-semibold mb-2">Ingresar</h2>
+      <p class="mut mb-4">Creá tu usuario o iniciá sesión con email y contraseña.</p>
+      <form id="loginForm" class="grid md:grid-cols-2 gap-3">
+        <input id="email" type="email" placeholder="Email" class="input" required />
+        <input id="password" type="password" placeholder="Contraseña" class="input" required />
+        <button id="signInBtn" class="btn-primary">Ingresar</button>
+        <button id="signUpBtn" class="btn">Crear cuenta</button>
+      </form>
+      <p id="authMsg" class="mt-3 text-sm"></p>
+    </section>
 
-<!-- AUTH -->
-<section id="auth" class="card p-6">
-<h2 class="text-xl font-semibold mb-2">Ingresar</h2>
-<p class="text-slate-600 mb-4">Creá tu usuario o iniciá sesión con email y contraseña.</p>
-<form id="loginForm" class="grid md:grid-cols-2 gap-3">
-<input id="email" type="email" placeholder="Email" class="border rounded-lg p-3" required />
-<input id="password" type="password" placeholder="Contraseña" class="border rounded-lg p-3" required />
-<button id="signInBtn" class="px-4 py-3 rounded-lg bg-black text-white">Ingresar</button>
-<button id="signUpBtn" class="px-4 py-3 rounded-lg border">Crear cuenta</button>
-</form>
-<p id="authMsg" class="mt-3 text-sm"></p>
-</section>
+    <!-- APP -->
+    <section id="app" class="hidden">
+      <nav class="flex flex-wrap gap-2 mb-4">
+        <button data-tab="dashboard" class="tab btn">Dashboard</button>
+        <button data-tab="worker" class="tab btn">Mi disponibilidad</button>
+        <button data-tab="myassign" class="tab btn">Mis asignaciones</button>
+        <button data-tab="admin" class="tab btn hidden" id="tabAdmin">Panel Admin</button>
+      </nav>
 
+      <!-- DASHBOARD -->
+      <div id="tab-dashboard" class="card p-6">
+        <h2 class="text-lg font-semibold mb-4">Dashboard</h2>
 
-<!-- APP -->
-<section id="app" class="hidden">
-<nav class="flex gap-2 mb-4">
-<button data-tab="worker" class="tab px-4 py-2 rounded-lg border bg-white" id="tabWorker">Mi disponibilidad</button>
-<button data-tab="myassign" class="tab px-4 py-2 rounded-lg border bg-white" id="tabMyAssign">Mis asignaciones</button>
-<button data-tab="admin" class="tab px-4 py-2 rounded-lg border bg-white hidden" id="tabAdmin">Panel Admin</button>
-</nav>
+        <div class="grid md:grid-cols-5 gap-3 mb-4">
+          <input id="dashFrom" type="date" class="input" />
+          <input id="dashTo" type="date" class="input" />
+          <select id="dashLocation" class="input"></select>
+          <select id="dashShift" class="input">
+            <option value="">(Todos)</option>
+            <option value="07-19">07–19</option>
+            <option value="19-07">19–07</option>
+          </select>
+          <button id="btnDashLoad" class="btn">Actualizar</button>
+        </div>
 
+        <div id="dashKpis" class="grid md:grid-cols-3 gap-3 mb-4"></div>
 
-<!-- WORKER: Disponibilidad -->
-... (todo el contenido del HTML se mantiene igual que antes, no hace falta repetirlo entero) ...
+        <h3 class="font-medium mb-2">Calendario de vacantes</h3>
+        <div class="flex items-center gap-2 mb-2">
+          <button id="calPrev" class="btn">←</button>
+          <div id="calTitle" class="font-medium"></div>
+          <button id="calNext" class="btn">→</button>
+          <span class="mut">Seleccione sede y turno arriba para ver disponibilidad</span>
+        </div>
+        <div id="calendar" class="calendar"></div>
+        <p class="mut mt-2">Click en un día con <strong>disponibles</strong> para precargar tu disponibilidad (se envía desde la pestaña “Mi disponibilidad”).</p>
+      </div>
 
+      <!-- WORKER: Disponibilidad -->
+      <div id="tab-worker" class="card p-6 mt-4">
+        <h2 class="text-lg font-semibold mb-4">Cargar disponibilidad</h2>
+        <form id="availForm" class="grid md:grid-cols-4 gap-3">
+          <select id="location" class="input" required>
+            <option value="">Ubicación…</option>
+          </select>
+          <select id="shift" class="input" required>
+            <option value="07-19">07–19</option>
+            <option value="19-07">19–07</option>
+          </select>
+          <input id="from" type="date" class="input" required />
+          <input id="to" type="date" class="input" required />
+          <button id="saveAvail" class="md:col-span-4 btn-primary">Guardar</button>
+        </form>
+        <div class="mt-4">
+          <h3 class="font-medium mb-2">Mis disponibilidades</h3>
+          <table class="w-full text-sm">
+            <thead><tr class="text-left"><th class="py-2">Fecha</th><th>Ubicación</th><th>Turno</th><th></th></tr></thead>
+            <tbody id="myAvail"></tbody>
+          </table>
+        </div>
+      </div>
 
-<script>
-// ================== CONFIG SUPABASE ==================
-const SUPABASE_URL = "https://atmcrlvaqmfulmujftrd.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0bWNybHZhcW1mdWxtdWpmdHJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyNDc5NjgsImV4cCI6MjA3MTgyMzk2OH0.ib1A6TlmEoqgPNnOdRh6ZQ0m_3dYrqAxSxCsr6yNoeM";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      <!-- WORKER: Mis asignaciones -->
+      <div id="tab-myassign" class="card p-6 mt-4">
+        <h2 class="text-lg font-semibold mb-4">Mis asignaciones</h2>
+        <table class="w-full text-sm">
+          <thead><tr class="text-left"><th class="py-2">Fecha</th><th>Ubicación</th><th>Turno</th><th>Estado</th></tr></thead>
+          <tbody id="myAssign"></tbody>
+        </table>
+      </div>
 
+      <!-- ADMIN PANEL -->
+      <div id="tab-admin" class="card p-6 mt-4 hidden">
+        <h2 class="text-lg font-semibold mb-4">Panel de administración</h2>
+        <div class="grid md:grid-cols-5 gap-3 mb-4">
+          <input id="admDay" type="date" class="input" />
+          <select id="admLocation" class="input"></select>
+          <select id="admShift" class="input">
+            <option value="07-19">07–19</option>
+            <option value="19-07">19–07</option>
+          </select>
+          <button id="btnLoadPool" class="btn">Ver solicitudes</button>
+          <button id="btnShowRules" class="btn">Reglas & Feriados</button>
+        </div>
 
-// (todo el script de JS se mantiene igual que antes)
-</script>
+        <div id="capacityBox" class="mb-4"></div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <div>
+            <h3 class="font-medium mb-2">Candidatos (solicitaron este turno)</h3>
+            <table class="w-full text-sm">
+              <thead><tr class="text-left"><th class="py-2">Persona</th><th></th></tr></thead>
+              <tbody id="pool"></tbody>
+            </table>
+          </div>
+          <div>
+            <h3 class="font-medium mb-2">Asignados</h3>
+            <table class="w-full text-sm">
+              <thead><tr class="text-left"><th class="py-2">Persona</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="assigned"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mt-4 flex gap-2">
+          <button id="btnPropose" class="btn-primary">Proponer automát.</button>
+          <button id="btnConfirmAll" class="btn-primary">Confirmar todos</button>
+          <button id="btnExport" class="btn">Exportar CSV (día)</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/dashboard.js"></script>
 </body>
 </html>
