@@ -274,3 +274,11 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION public.vacancy_status_range(date, date, int, text) TO authenticated;
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS dni TEXT,
+  ADD COLUMN IF NOT EXISTS cuil TEXT,
+  ADD COLUMN IF NOT EXISTS phone TEXT,
+  ADD COLUMN IF NOT EXISTS address TEXT,
+  ADD COLUMN IF NOT EXISTS city TEXT,
+  ADD COLUMN IF NOT EXISTS notes TEXT;
