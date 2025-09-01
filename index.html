@@ -4,12 +4,32 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CRM Vacantes — Supabase</title>
-  <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{color-scheme:light}
+    body{background:#f7fafc}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 10px 24px rgba(0,0,0,.06)}
+    .chip{display:inline-block;padding:2px 10px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px}
+    .tab{cursor:pointer}
+    .badge{display:inline-block;padding:.2rem .5rem;border-radius:999px;border:1px solid #e5e7eb}
+    .input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:10px;background:#fff}
+    .btn{padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
+    .btn-primary{padding:10px 12px;border-radius:10px;background:#0f172a;color:#fff}
+    .calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+    .cal-head,.cal-cell{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:8px;min-height:64px}
+    .cal-head{font-weight:600;text-align:center;background:#f8fafc}
+    .cal-cell .d{font-weight:600}
+    .cal-cell.disabled{opacity:.4;pointer-events:none}
+    .cal-cell.clickable{cursor:pointer;outline:2px solid transparent}
+    .cal-cell.clickable:hover{outline-color:#0ea5e9}
+    .badge-ok{background:#ecfdf5;border-color:#10b981}
+    .badge-zero{background:#fef2f2;border-color:#ef4444}
+  </style>
 </head>
-<body class="min-h-screen bg-slate-50">
-  <div class="max-w-6xl mx-auto p-4 md:p-8">
+<body class="min-h-screen">
+  <div class="max-w-7xl mx-auto p-4 md:p-8">
     <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
       <h1 class="text-2xl font-bold">CRM Vacantes — Supabase</h1>
       <div id="userBox" class="hidden items-center gap-3">
@@ -21,8 +41,8 @@
     <!-- AUTH -->
     <section id="auth" class="card p-6">
       <h2 class="text-xl font-semibold mb-2">Ingresar</h2>
-      <p class="mut mb-4">Creá tu usuario o iniciá sesión con email y contraseña.</p>
-      <form id="loginForm" class="grid md:grid-cols-2 gap-3">
+      <p class="text-slate-600 mb-4">Creá tu usuario o iniciá sesión con email y contraseña.</p>
+      <form class="grid md:grid-cols-2 gap-3">
         <input id="email" type="email" placeholder="Email" class="input" required />
         <input id="password" type="password" placeholder="Contraseña" class="input" required />
         <button id="signInBtn" class="btn-primary">Ingresar</button>
@@ -34,16 +54,15 @@
     <!-- APP -->
     <section id="app" class="hidden">
       <nav class="flex flex-wrap gap-2 mb-4">
-        <button data-tab="dashboard" class="tab btn">Dashboard</button>
-        <button data-tab="worker" class="tab btn">Mi disponibilidad</button>
-        <button data-tab="myassign" class="tab btn">Mis asignaciones</button>
-        <button data-tab="admin" class="tab btn hidden" id="tabAdmin">Panel Admin</button>
+        <button data-tab="dashboard" class="tab btn hidden" id="btnTabDash">Dashboard</button>
+        <button data-tab="worker"    class="tab btn">Mi disponibilidad</button>
+        <button data-tab="myassign"  class="tab btn">Mis asignaciones</button>
+        <button data-tab="admin"     class="tab btn hidden" id="btnTabAdmin">Panel Admin</button>
       </nav>
 
-      <!-- DASHBOARD -->
-      <div id="tab-dashboard" class="card p-6">
+      <!-- DASHBOARD (solo admin) -->
+      <div id="tab-dashboard" class="card p-6 hidden">
         <h2 class="text-lg font-semibold mb-4">Dashboard</h2>
-
         <div class="grid md:grid-cols-5 gap-3 mb-4">
           <input id="dashFrom" type="date" class="input" />
           <input id="dashTo" type="date" class="input" />
@@ -55,22 +74,19 @@
           </select>
           <button id="btnDashLoad" class="btn">Actualizar</button>
         </div>
-
         <div id="dashKpis" class="grid md:grid-cols-3 gap-3 mb-4"></div>
 
-        <h3 class="font-medium mb-2">Calendario de vacantes</h3>
         <div class="flex items-center gap-2 mb-2">
           <button id="calPrev" class="btn">←</button>
           <div id="calTitle" class="font-medium"></div>
           <button id="calNext" class="btn">→</button>
-          <span class="mut">Seleccione sede y turno arriba para ver disponibilidad</span>
+          <span class="text-slate-500">Elegí sede/turno arriba para ver cupos</span>
         </div>
-        <div id="calendar" class="calendar"></div>
-        <p class="mut mt-2">Click en un día con <strong>disponibles</strong> para precargar tu disponibilidad (se envía desde la pestaña “Mi disponibilidad”).</p>
+        <div class="calendar" id="calendar"></div>
       </div>
 
       <!-- WORKER: Disponibilidad -->
-      <div id="tab-worker" class="card p-6 mt-4">
+      <div id="tab-worker" class="card p-6 hidden">
         <h2 class="text-lg font-semibold mb-4">Cargar disponibilidad</h2>
         <form id="availForm" class="grid md:grid-cols-4 gap-3">
           <select id="location" class="input" required>
@@ -84,7 +100,8 @@
           <input id="to" type="date" class="input" required />
           <button id="saveAvail" class="md:col-span-4 btn-primary">Guardar</button>
         </form>
-        <div class="mt-4">
+
+        <div class="mt-6">
           <h3 class="font-medium mb-2">Mis disponibilidades</h3>
           <table class="w-full text-sm">
             <thead><tr class="text-left"><th class="py-2">Fecha</th><th>Ubicación</th><th>Turno</th><th></th></tr></thead>
@@ -94,7 +111,7 @@
       </div>
 
       <!-- WORKER: Mis asignaciones -->
-      <div id="tab-myassign" class="card p-6 mt-4">
+      <div id="tab-myassign" class="card p-6 hidden">
         <h2 class="text-lg font-semibold mb-4">Mis asignaciones</h2>
         <table class="w-full text-sm">
           <thead><tr class="text-left"><th class="py-2">Fecha</th><th>Ubicación</th><th>Turno</th><th>Estado</th></tr></thead>
@@ -103,7 +120,7 @@
       </div>
 
       <!-- ADMIN PANEL -->
-      <div id="tab-admin" class="card p-6 mt-4 hidden">
+      <div id="tab-admin" class="card p-6 hidden">
         <h2 class="text-lg font-semibold mb-4">Panel de administración</h2>
         <div class="grid md:grid-cols-5 gap-3 mb-4">
           <input id="admDay" type="date" class="input" />
@@ -120,7 +137,7 @@
 
         <div class="grid md:grid-cols-2 gap-4">
           <div>
-            <h3 class="font-medium mb-2">Candidatos (solicitaron este turno)</h3>
+            <h3 class="font-medium mb-2">Candidatos (pidieron este turno)</h3>
             <table class="w-full text-sm">
               <thead><tr class="text-left"><th class="py-2">Persona</th><th></th></tr></thead>
               <tbody id="pool"></tbody>
@@ -144,8 +161,258 @@
     </section>
   </div>
 
-  <script src="js/config.js"></script>
-  <script src="js/app.js"></script>
-  <script src="js/dashboard.js"></script>
+<script>
+/* ============== CONFIG SUPABASE ============== */
+const SUPABASE_URL = "https://atmcrlvaqmfulmujftrd.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0bWNybHZhcW1mdWxtdWpmdHJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyNDc5NjgsImV4cCI6MjA3MTgyMzk2OH0.ib1A6TlmEoqgPNnOdRh6ZQ0m_3dYrqAxSxCsr6yNoeM";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ============== UTILS ============== */
+const $$ = (s, el=document) => el.querySelector(s);
+const $$$ = (s, el=document) => Array.from(el.querySelectorAll(s));
+function iso(d){ return new Date(d).toISOString().slice(0,10); }
+function setTab(name){ ['dashboard','worker','admin','myassign'].forEach(n=> $$('#tab-'+n)?.classList.toggle('hidden', n!==name)); }
+function monthTitle(y,m){ return ['Enero','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m]+' '+y; }
+function firstCell(y,m){ const f=new Date(y,m,1); const dow=(f.getDay()+6)%7; const s=new Date(f); s.setDate(f.getDate()-dow); return s; }
+
+/* ============== STATE ============== */
+let user=null, profile=null, chart=null, calY=new Date().getFullYear(), calM=new Date().getMonth();
+
+/* ============== INIT ============== */
+(async function(){
+  $$('#signInBtn').addEventListener('click', (e)=>auth(e,false));
+  $$('#signUpBtn').addEventListener('click', (e)=>auth(e,true));
+  $$('#logoutBtn').addEventListener('click', logout);
+
+  $$$('.tab').forEach(b=> b.addEventListener('click',()=> {
+    const t=b.dataset.tab; setTab(t);
+    if(t==='dashboard') loadDashboard();
+    if(t==='worker')    loadMyAvail();
+    if(t==='myassign')  loadMyAssign();
+  }));
+
+  $$('#saveAvail').addEventListener('click', saveAvailability);
+  $$('#btnLoadPool').addEventListener('click', loadAdminPool);
+  $$('#btnPropose').addEventListener('click', proposeAuto);
+  $$('#btnConfirmAll').addEventListener('click', confirmAll);
+  $$('#btnExport').addEventListener('click', exportCSV);
+
+  $$('#btnDashLoad').addEventListener('click', loadDashboard);
+  $$('#calPrev').addEventListener('click', ()=>{ calM--; if(calM<0){calM=11;calY--;} renderCalendar(); });
+  $$('#calNext').addEventListener('click', ()=>{ calM++; if(calM>11){calM=0;calY++;} renderCalendar(); });
+
+  const { data:{ session } } = await supabase.auth.getSession();
+  if(session?.user) await onLogin(session.user); else { $$('#auth').classList.remove('hidden'); }
+  supabase.auth.onAuthStateChange(async(_e,s)=>{ if(s?.user) await onLogin(s.user); else onLogout(); });
+})();
+
+/* ============== AUTH ============== */
+async function auth(e, signup=false){
+  e.preventDefault();
+  const email=$$('#email').value.trim(), password=$$('#password').value.trim(), msg=$$('#authMsg');
+  if(!email||!password){ msg.textContent='Completá email y contraseña'; msg.className='text-red-600'; return; }
+  const fn = signup ? supabase.auth.signUp : supabase.auth.signInWithPassword;
+  const res = signup
+    ? await fn({ email, password, options:{ data:{ full_name: email.split('@')[0] } } })
+    : await fn({ email, password });
+  if(res.error){ msg.textContent=res.error.message; msg.className='text-red-600'; return; }
+  msg.textContent = signup ? 'Cuenta creada.' : 'Ingreso correcto.'; msg.className='text-emerald-600';
+}
+
+async function onLogin(u){
+  user=u;
+  const { data } = await supabase.from('profiles').select('*').eq('id', u.id).single();
+  profile = data||{};
+  $$('#userBox').classList.remove('hidden');
+  $$('#userName').textContent = `${u.email} — rol: ${profile.role||'worker'}`;
+  $$('#auth').classList.add('hidden');
+  $$('#app').classList.remove('hidden');
+
+  // mostrar tabs segun rol
+  const isAdmin = profile?.role === 'admin';
+  $$('#btnTabAdmin').classList.toggle('hidden', !isAdmin);
+  $$('#btnTabDash').classList.toggle('hidden', !isAdmin);
+
+  // cargar selects
+  const { data: locs } = await supabase.from('locations').select('*').order('id');
+  [['location',true],['admLocation',false],['dashLocation',false]].forEach(([id,withEmpty])=>{
+    const sel=$$('#'+id); if(!sel) return;
+    sel.innerHTML = withEmpty ? '<option value="">Ubicación…</option>' : '';
+    (locs||[]).forEach(l=>{ const o=document.createElement('option'); o.value=l.id; o.textContent=`${l.id} — ${l.name}`; sel.appendChild(o); });
+  });
+
+  // fechas por defecto
+  const t=new Date(); $$('#from').valueAsDate=t; $$('#to').valueAsDate=t; $$('#admDay').valueAsDate=t;
+  const f=new Date(t.getFullYear(), t.getMonth(), 1), to=new Date(t.getFullYear(), t.getMonth()+1, 0);
+  $$('#dashFrom').valueAsDate=f; $$('#dashTo').valueAsDate=to;
+
+  setTab(isAdmin ? 'dashboard' : 'worker');
+  if(isAdmin) await loadDashboard();
+  await loadMyAvail(); await loadMyAssign();
+}
+
+async function onLogout(){ user=null; profile=null; $$('#app').classList.add('hidden'); $$('#auth').classList.remove('hidden'); }
+async function logout(){ await supabase.auth.signOut(); }
+
+/* ============== WORKER ============== */
+async function saveAvailability(e){
+  e.preventDefault();
+  const location_id=parseInt($$('#location').value), shift_label=$$('#shift').value;
+  const d1=new Date($$('#from').value), d2=new Date($$('#to').value);
+  if(!location_id||!shift_label||isNaN(+d1)||isNaN(+d2)||d1>d2) return alert('Completá correctamente');
+  for(let d=new Date(d1); d<=d2; d.setDate(d.getDate()+1)){
+    await supabase.from('availabilities').insert({ user_id:user.id, location_id, shift_label, day: iso(d) }).then(()=>{});
+  }
+  await loadMyAvail();
+}
+
+async function loadMyAvail(){
+  const { data } = await supabase.from('availabilities').select('id, day, shift_label, locations(id,name)').eq('user_id', user.id).order('day');
+  const tb=$$('#myAvail'); tb.innerHTML='';
+  (data||[]).forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-2">${r.day}</td><td>${r.locations?.id} — ${r.locations?.name||''}</td><td>${r.shift_label}</td><td><button class="text-red-600" data-del="${r.id}">Eliminar</button></td>`;
+    tb.appendChild(tr);
+  });
+  $$$('#myAvail [data-del]').forEach(btn=> btn.addEventListener('click', async ()=>{ await supabase.from('availabilities').delete().eq('id', btn.dataset.del); await loadMyAvail(); }));
+}
+
+async function loadMyAssign(){
+  const { data } = await supabase.from('assignments').select('id, day, shift_label, status, locations(id,name)').eq('user_id', user.id).order('day');
+  const tb=$$('#myAssign'); tb.innerHTML='';
+  (data||[]).forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-2">${r.day}</td><td>${r.locations?.id} — ${r.locations?.name||''}</td><td>${r.shift_label}</td><td><span class="chip">${r.status}</span></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* ============== ADMIN ============== */
+async function loadAdminPool(){
+  const day=$$('#admDay').value, location_id=parseInt($$('#admLocation').value), shift_label=$$('#admShift').value;
+  if(!day||!location_id||!shift_label) return alert('Completá filtros');
+
+  const { data: cap } = await supabase.from('vacancy_status').select('*').eq('day', day).eq('location_id', location_id).eq('shift_label', shift_label).maybeSingle();
+  $$('#capacityBox').innerHTML = cap? `<div class="chip">Cupos: ${cap.cupos} — Ocupados: ${cap.ocupados} — Disponibles: ${cap.disponibles}</div>` : '<div class="chip">Sin regla cargada</div>';
+
+  const { data: pool } = await supabase.from('availabilities').select('id, user_id, profiles(full_name)').eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label).order('created_at');
+  const poolBody=$$('#pool'); poolBody.innerHTML='';
+  (pool||[]).forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-2">${r.profiles?.full_name||'(Sin nombre)'}</td><td><button class="btn" data-add="${r.user_id}">Asignar</button></td>`;
+    poolBody.appendChild(tr);
+  });
+
+  const { data: assigned } = await supabase.from('assignments').select('id,status,user_id,profiles(full_name)').eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label).order('created_at');
+  const asBody=$$('#assigned'); asBody.innerHTML='';
+  (assigned||[]).forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-2">${r.profiles?.full_name||'(Sin nombre)'}</td><td><span class="chip">${r.status}</span></td>
+    <td class="space-x-2"><button class="text-emerald-700" data-confirm="${r.id}">Confirmar</button>
+    <button class="text-amber-700" data-prop="${r.id}">Proponer</button>
+    <button class="text-red-700" data-del="${r.id}">Quitar</button></td>`;
+    asBody.appendChild(tr);
+  });
+
+  $$$('#pool [data-add]').forEach(b=> b.addEventListener('click', ()=> addAssignment(b.dataset.add, day, location_id, shift_label)));
+  $$$('#assigned [data-confirm]').forEach(b=> b.addEventListener('click', ()=> updateAssignmentStatus(parseInt(b.dataset.confirm), 'confirmado')));
+  $$$('#assigned [data-prop]').forEach(b=> b.addEventListener('click', ()=> updateAssignmentStatus(parseInt(b.dataset.prop), 'propuesto')));
+  $$$('#assigned [data-del]').forEach(b=> b.addEventListener('click', ()=> deleteAssignment(parseInt(b.dataset.del))));
+}
+
+async function addAssignment(user_id, day, location_id, shift_label){
+  const { data: cap } = await supabase.from('vacancy_status').select('*').eq('day', day).eq('location_id', location_id).eq('shift_label', shift_label).maybeSingle();
+  if(cap && cap.disponibles<=0) return alert('No hay cupos disponibles.');
+  const { error } = await supabase.from('assignments').insert({ user_id, day, location_id, shift_label, status:'propuesto', created_by: user.id });
+  if(error) alert(error.message); else loadAdminPool();
+}
+async function updateAssignmentStatus(id,status){ const { error } = await supabase.from('assignments').update({ status }).eq('id', id); if(!error) loadAdminPool(); }
+async function deleteAssignment(id){ const { error } = await supabase.from('assignments').delete().eq('id', id); if(!error) loadAdminPool(); }
+async function proposeAuto(){
+  const day=$$('#admDay').value, location_id=parseInt($$('#admLocation').value), shift_label=$$('#admShift').value;
+  const { data: cap } = await supabase.from('vacancy_status').select('*').eq('day', day).eq('location_id', location_id).eq('shift_label', shift_label).maybeSingle();
+  if(!cap) return alert('Sin regla de cupos');
+  const { data: assigned } = await supabase.from('assignments').select('user_id').eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label).in('status',['propuesto','confirmado']);
+  const usados = new Set((assigned||[]).map(r=>r.user_id));
+  const { data: pool } = await supabase.from('availabilities').select('user_id').eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label);
+  const candidatos = Array.from(new Set((pool||[]).map(r=>r.user_id))).filter(u=>!usados.has(u));
+  const libres = Math.max(0, cap.disponibles);
+  for(let i=0;i<Math.min(libres, candidatos.length);i++){
+    await supabase.from('assignments').insert({ user_id: candidatos[i], day, location_id, shift_label, status:'propuesto', created_by: user.id });
+  }
+  await loadAdminPool();
+}
+async function confirmAll(){
+  const day=$$('#admDay').value, location_id=parseInt($$('#admLocation').value), shift_label=$$('#admShift').value;
+  await supabase.from('assignments').update({ status:'confirmado' }).eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label);
+  await loadAdminPool();
+}
+async function exportCSV(){
+  const day=$$('#admDay').value, location_id=parseInt($$('#admLocation').value), shift_label=$$('#admShift').value;
+  const { data } = await supabase.from('assignments').select('day,shift_label,status,profiles(full_name),locations(name)').eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label);
+  const rows=[['Fecha','Ubicación','Turno','Nombre','Estado']].concat((data||[]).map(r=>[r.day,r.locations?.name||'',r.shift_label,r.profiles?.full_name||'',r.status]));
+  const csv = rows.map(r=>r.map(x=>`"${String(x||'').replaceAll('"','""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=`asignaciones_${day}_${location_id}_${shift_label}.csv`; a.click(); URL.revokeObjectURL(url);
+}
+
+/* ============== DASHBOARD ============== */
+async function loadDashboard(){
+  const from=$$('#dashFrom').value, to=$$('#dashTo').value, loc=$$('#dashLocation').value, sh=$$('#dashShift').value;
+  let q=supabase.from('vacancy_status').select('*').gte('day',from).lte('day',to);
+  if(loc) q=q.eq('location_id',parseInt(loc));
+  if(sh) q=q.eq('shift_label',sh);
+  const { data } = await q.order('day');
+
+  const cupos=(data||[]).reduce((a,b)=>a+(b.cupos||0),0);
+  const ocup=(data||[]).reduce((a,b)=>a+(b.ocupados||0),0);
+  const disp=(data||[]).reduce((a,b)=>a+(b.disponibles||0),0);
+  $$('#dashKpis').innerHTML = `
+    <div class="card p-4"><div class="text-slate-500">Cupos</div><div class="text-2xl font-bold">${cupos}</div></div>
+    <div class="card p-4"><div class="text-slate-500">Ocupados</div><div class="text-2xl font-bold">${ocup}</div></div>
+    <div class="card p-4"><div class="text-slate-500">Disponibles</div><div class="text-2xl font-bold">${disp}</div></div>
+  `;
+
+  // preparar calendario con sede/turno seleccionados
+  renderCalendar();
+}
+
+function renderCalendar(){
+  const loc=parseInt($$('#dashLocation').value||'0')||null;
+  const sh=$$('#dashShift').value||null;
+  const title = monthTitle(calY, calM);
+  $$('#calTitle').textContent = title;
+  const cal=$$('#calendar'); cal.innerHTML='';
+  ['L','M','M','J','V','S','D'].forEach(x=>{ const d=document.createElement('div'); d.className='cal-head'; d.textContent=x; cal.appendChild(d); });
+
+  const start=firstCell(calY,calM);
+  const days=[]; for(let i=0;i<42;i++){ const d=new Date(start); d.setDate(start.getDate()+i); days.push(d); }
+
+  const from = iso(new Date(calY,calM,1)), to = iso(new Date(calY,calM+1,0));
+  const load = loc&&sh
+    ? supabase.from('vacancy_status').select('*').gte('day',from).lte('day',to).eq('location_id',loc).eq('shift_label',sh)
+    : supabase.from('vacancy_status').select('*').gte('day',from).lte('day',to);
+  load.then(({data})=>{
+    const map={}; (data||[]).forEach(r=>{ map[r.day]=(map[r.day]||0)+(r.disponibles||0); });
+    days.forEach(d=>{
+      const key=iso(d), inMonth=(d.getMonth()===calM);
+      const cell=document.createElement('div'); cell.className='cal-cell'+(inMonth?'':' disabled');
+      const disp = map[key]==null? null : map[key];
+      const badge = disp==null? '' : (disp>0? `<span class="badge badge-ok">${disp} disp.</span>` : `<span class="badge badge-zero">0</span>`);
+      cell.innerHTML=`<div class="d">${d.getDate()}</div><div>${badge}</div>`;
+      if(inMonth && disp>0 && loc && sh){
+        cell.classList.add('clickable');
+        cell.addEventListener('click', ()=>{
+          // precarga para alta rápida
+          setTab('worker');
+          $$('#from').value = key; $$('#to').value = key;
+          $$('#location').value = String(loc); $$('#shift').value = sh;
+        });
+      }
+      cal.appendChild(cell);
+    });
+  });
+}
+</script>
 </body>
 </html>
