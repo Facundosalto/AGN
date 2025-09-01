@@ -10,7 +10,11 @@
   <style>
     :root{color-scheme:light}
     body{
-      background: radial-gradient(1200px 800px at -10% -20%, #dbeafe 0, transparent 60%), radial-gradient(1000px 600px at 110% 10%, #e0e7ff 0, transparent 60%), #f6f9fc;
+      background:
+        radial-gradient(1200px 800px at -10% -20%, #dbeafe 0, transparent 60%),
+        radial-gradient(1000px 600px at 110% 10%, #e0e7ff 0, transparent 60%),
+        #f6f9fc;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
     }
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:18px;box-shadow:0 14px 30px rgba(2,6,23,.08)}
     .chip{display:inline-block;padding:6px 12px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px;background:#f8fafc}
@@ -43,7 +47,9 @@
     <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
       <div>
         <h1 class="text-2xl font-bold">CRM Vacantes — Supabase</h1>
-        <p class="mt-1 text-sm text-slate-600 secure inline-block px-3 py-1 rounded-lg">🔒 Datos protegidos: autenticación Supabase + RLS activo. Solo ves lo que tu rol permite.</p>
+        <p class="mt-1 text-sm text-slate-600 secure inline-block px-3 py-1 rounded-lg">
+          🔒 Datos protegidos: autenticación Supabase + RLS activo. Solo ves lo que tu rol permite.
+        </p>
       </div>
       <div id="userBox" class="hidden items-center gap-3">
         <span id="userName" class="chip"></span>
@@ -262,16 +268,44 @@ async function auth(e, signup=false){
   e.preventDefault();
   const email=$$('#email').value.trim(), password=$$('#password').value.trim(), msg=$$('#authMsg');
   if(!email||!password){ msg.textContent='Completá email y contraseña'; msg.className='text-red-600'; return; }
-  const fn = signup ? supabase.auth.signUp : supabase.auth.signInWithPassword;
-  const res = signup ? await fn({ email, password, options:{ data:{ full_name: email.split('@')[0] } } }) : await fn({ email, password });
-  if(res.error){ msg.textContent=res.error.message; msg.className='text-red-600'; return; }
-  msg.textContent = signup? 'Cuenta creada.' : 'Ingreso correcto.'; msg.className='text-emerald-600';
+  try{
+    let res;
+    if (signup) {
+      res = await supabase.auth.signUp({ email, password, options:{ data:{ full_name: email.split('@')[0] } } });
+    } else {
+      res = await supabase.auth.signInWithPassword({ email, password });
+    }
+    if(res.error) throw res.error;
+
+    msg.textContent = signup? 'Cuenta creada.' : 'Ingreso correcto.';
+    msg.className='text-emerald-600';
+
+    // Pasar directo a la app sin esperar el evento
+    const u = res.data?.user || (await supabase.auth.getUser()).data?.user || (await supabase.auth.getSession()).data?.session?.user;
+    if (u) await onLogin(u);
+  }catch(err){
+    console.error(err);
+    msg.textContent = err.message || 'Error de autenticación';
+    msg.className='text-red-600';
+  }
 }
 
+/* ===== LOGIN BOOT ===== */
 async function onLogin(u){
   user=u;
-  const { data } = await supabase.from('profiles').select('*').eq('id', u.id).single();
-  profile = data||{};
+
+  // Asegurar perfil (si el trigger no corrió en su momento)
+  let { data: prof } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
+  if(!prof){
+    await supabase.from('profiles').insert({
+      id: u.id,
+      full_name: (u.user_metadata?.full_name || u.email?.split('@')[0] || 'Usuario')
+    }).then(()=>{});
+    ({ data: prof } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle());
+  }
+  profile = prof || {};
+
+  // UI
   $$('#userBox').classList.remove('hidden');
   $$('#userName').textContent = `${u.email} — rol: ${profile.role||'worker'}`;
   $$('#auth').classList.add('hidden'); $$('#app').classList.remove('hidden');
@@ -281,7 +315,7 @@ async function onLogin(u){
   $$('#btnTabDash').classList.toggle('hidden', !isAdmin);
   $$('#btnTabHistory').classList.toggle('hidden', !isAdmin);
 
-  // cargar selects
+  // Cargar selects
   const { data: locs } = await supabase.from('locations').select('*').order('id');
   [['location',true],['admLocation',false],['dashLocation',false]].forEach(([id,withEmpty])=>{
     const sel=$$('#'+id); if(!sel) return;
@@ -289,7 +323,7 @@ async function onLogin(u){
     (locs||[]).forEach(l=>{ const o=document.createElement('option'); o.value=l.id; o.textContent=`${l.id} — ${l.name}`; sel.appendChild(o); });
   });
 
-  // fechas
+  // Fechas por defecto
   const t=new Date(); $$('#from').valueAsDate=t; $$('#to').valueAsDate=t; $$('#admDay').valueAsDate=t;
   const f=new Date(t.getFullYear(), t.getMonth(), 1), to=new Date(t.getFullYear(), t.getMonth()+1, 0);
   $$('#dashFrom').valueAsDate=f; $$('#dashTo').valueAsDate=to;
@@ -299,7 +333,6 @@ async function onLogin(u){
   if(isAdmin) await loadDashboard();
   await loadMyAvail(); await loadMyAssign();
 }
-
 async function onLogout(){ user=null; profile=null; $$('#app').classList.add('hidden'); $$('#auth').classList.remove('hidden'); }
 async function logout(){ await supabase.auth.signOut(); }
 
@@ -314,7 +347,6 @@ async function saveAvailability(e){
   }
   await loadMyAvail();
 }
-
 async function loadMyAvail(){
   const { data } = await supabase.from('availabilities').select('id, day, shift_label, locations(id,name)').eq('user_id', user.id).order('day');
   const tb=$$('#myAvail'); tb.innerHTML='';
@@ -325,7 +357,6 @@ async function loadMyAvail(){
   });
   $$$('#myAvail [data-del]').forEach(btn=> btn.addEventListener('click', async ()=>{ await supabase.from('availabilities').delete().eq('id', btn.dataset.del); await loadMyAvail(); }));
 }
-
 async function loadMyAssign(){
   const { data } = await supabase.from('assignments').select('id, day, shift_label, status, locations(id,name)').eq('user_id', user.id).order('day');
   const tb=$$('#myAssign'); tb.innerHTML='';
@@ -368,7 +399,6 @@ async function loadAdminPool(){
   $$$('#assigned [data-prop]').forEach(b=> b.addEventListener('click', ()=> updateAssignmentStatus(parseInt(b.dataset.prop), 'propuesto')));
   $$$('#assigned [data-del]').forEach(b=> b.addEventListener('click', ()=> deleteAssignment(parseInt(b.dataset.del))));
 }
-
 async function addAssignment(user_id, day, location_id, shift_label){
   const { data: cap } = await supabase.from('vacancy_status').select('*').eq('day', day).eq('location_id', location_id).eq('shift_label', shift_label).maybeSingle();
   if(cap && cap.disponibles<=0) return alert('No hay cupos disponibles.');
@@ -423,7 +453,6 @@ async function loadDashboard(){
   `;
   renderCalendar();
 }
-
 function renderCalendar(){
   const loc=parseInt($$('#dashLocation').value||'0')||null;
   const sh=$$('#dashShift').value||null;
@@ -460,7 +489,7 @@ function renderCalendar(){
   });
 }
 
-/* ===== HISTORIAL (TODOS LOS MOVIMIENTOS) ===== */
+/* ===== HISTORIAL ===== */
 async function loadHistory(page=1){
   const term = ($$('#histName').value||'').trim();
   const from = $$('#histFrom').value || null;
@@ -471,15 +500,11 @@ async function loadHistory(page=1){
     .select('*', { count: 'exact' })
     .order('created_at', { ascending: false });
 
-  if(term){
-    // buscar por nombre o email
-    q = q.or(`full_name.ilike.%${term}%,email.ilike.%${term}%`);
-  }
+  if(term){ q = q.or(`full_name.ilike.%${term}%,email.ilike.%${term}%`); }
   if(from) q = q.gte('day', from);
   if(to)   q = q.lte('day', to);
   if(kind) q = q.eq('kind', kind);
 
-  // paginación (para traer TODO sin cortar)
   histPage = page;
   const fromIdx = (page-1)*histPerPage;
   const toIdx   = fromIdx + histPerPage - 1;
