@@ -111,9 +111,9 @@
               </div>
             </div>
             <div class="flex items-center gap-2 mb-2">
-              <button class="btn" id="cal1Prev">←</button>
+              <button class="btn" id="cal1Prev" type="button">←</button>
               <div id="cal1Title" class="font-medium"></div>
-              <button class="btn" id="cal1Next">→</button>
+              <button class="btn" id="cal1Next" type="button">→</button>
             </div>
             <div id="cal1" class="calendar"></div>
           </div>
@@ -128,16 +128,16 @@
               </div>
             </div>
             <div class="flex items-center gap-2 mb-2">
-              <button class="btn" id="cal2Prev">←</button>
+              <button class="btn" id="cal2Prev" type="button">←</button>
               <div id="cal2Title" class="font-medium"></div>
-              <button class="btn" id="cal2Next">→</button>
+              <button class="btn" id="cal2Next" type="button">→</button>
             </div>
             <div id="cal2" class="calendar"></div>
           </div>
         </div>
 
         <div class="mt-4 flex items-center gap-3">
-          <button id="btnSolicitar" class="btn-primary">Solicitar días</button>
+          <button id="btnSolicitar" class="btn-primary" type="button">Solicitar días</button>
           <span class="text-sm text-slate-600" id="selResume">—</span>
         </div>
       </div>
@@ -167,7 +167,7 @@
           <textarea id="pf_notes"   class="input md:col-span-3" rows="2" placeholder="Notas"></textarea>
         </div>
         <div class="mt-3">
-          <button id="btnSaveProfile" class="btn-primary">Guardar mis datos</button>
+          <button id="btnSaveProfile" class="btn-primary" type="button">Guardar mis datos</button>
         </div>
       </div>
 
@@ -184,7 +184,7 @@
             <option value="19-07">19–07</option>
           </select>
           <input id="rqSearch" class="input" placeholder="Buscar por nombre…" />
-          <button id="btnRqLoad" class="btn">Actualizar</button>
+          <button id="btnRqLoad" class="btn" type="button">Actualizar</button>
         </div>
         <div class="mb-3 text-sm" id="rqResume">—</div>
         <table class="w-full text-sm">
@@ -192,11 +192,11 @@
           <tbody id="rqTable"></tbody>
         </table>
         <div class="mt-3">
-          <button id="btnRqExport" class="btn">Exportar CSV</button>
+          <button id="btnRqExport" class="btn" type="button">Exportar CSV</button>
         </div>
       </div>
 
-      <!-- ADMIN: ASIGNACIONES (panel existente) -->
+      <!-- ADMIN: ASIGNACIONES -->
       <div id="tab-admin-assign" class="card p-6 hidden">
         <h2 class="text-lg font-semibold mb-4">Asignaciones (Admin)</h2>
         <div class="grid md:grid-cols-5 gap-3 mb-4">
@@ -206,8 +206,8 @@
             <option value="07-19">07–19</option>
             <option value="19-07">19–07</option>
           </select>
-          <button id="btnLoadPool" class="btn">Ver solicitudes</button>
-          <button id="btnExport" class="btn">Exportar CSV (día)</button>
+          <button id="btnLoadPool" class="btn" type="button">Ver solicitudes</button>
+          <button id="btnExport" class="btn" type="button">Exportar CSV (día)</button>
         </div>
 
         <div id="capacityBox" class="mb-4"></div>
@@ -234,9 +234,9 @@
       <div id="tab-general" class="card p-6 hidden">
         <h2 class="text-lg font-semibold mb-2">Calendario general (solicitudes del personal)</h2>
         <div class="flex items-center gap-2 mb-3">
-          <button class="btn" id="gPrev">←</button>
+          <button class="btn" id="gPrev" type="button">←</button>
           <div id="gTitle" class="font-medium"></div>
-          <button class="btn" id="gNext">→</button>
+          <button class="btn" id="gNext" type="button">→</button>
           <span class="text-sm text-slate-600">Click en un día para ver quiénes solicitaron</span>
         </div>
         <div class="calendar" id="gCal"></div>
@@ -247,7 +247,7 @@
         <div class="bg-white rounded-xl p-4 w-[520px] max-w-[95%]">
           <div class="flex items-center justify-between mb-2">
             <h3 class="font-medium" id="gModalTitle">Solicitudes</h3>
-            <button class="btn" id="gClose">Cerrar</button>
+            <button class="btn" id="gClose" type="button">Cerrar</button>
           </div>
           <div id="gList" class="text-sm"></div>
         </div>
@@ -282,7 +282,7 @@ let gMonth = new Date().getMonth();
 /* ============== INIT ============== */
 (async function(){
   // auth buttons
-  $$('#signInBtn').addEventListener('click', (e)=>auth(e,false));
+  $$('#signInBtn').addEventListener('click', (e)=>auth(e));
   $$('#showSignup').addEventListener('click', ()=> $$('#signupCard').classList.toggle('hidden'));
   $$('#signUpBtn').addEventListener('click', signUpFull);
   $$('#logoutBtn').addEventListener('click', logout);
@@ -296,7 +296,7 @@ let gMonth = new Date().getMonth();
     if(t==='myassign') loadMyAssign();
     if(t==='profile')  loadMyProfile();
     if(t==='admin-req') await loadAdminRequests();
-    if(t==='admin-assign') {/* nada; se usa Ver solicitudes */ }
+    if(t==='admin-assign') {/* usa Ver solicitudes */ }
     if(t==='general') await renderGeneralCalendar();
   }));
 
@@ -459,89 +459,147 @@ function updateSelResume(){
 /* ============== SOLICITUD (carga + PDF PLANILLA) ============== */
 async function solicitarDias(){
   if(!sessionUser) return;
-  const sel1=[...cal[1].selected].sort();
-  const sel2=[...cal[2].selected].sort();
+
+  // 1) Recolecto selección de ambos calendarios
+  const sel1=[...cal[1].selected].sort();        // Rivadavia
+  const sel2=[...cal[2].selected].sort();        // Yrigoyen
   const sh1 = (document.querySelector('input[name="sh1"]:checked')?.value)||'07-19';
   const sh2 = (document.querySelector('input[name="sh2"]:checked')?.value)||'07-19';
 
-  for(const d of sel1){ await supabase.from('availabilities').insert({ user_id:sessionUser.id, location_id:L1.id, shift_label:sh1, day:d }).then(()=>{}); }
-  for(const d of sel2){ await supabase.from('availabilities').insert({ user_id:sessionUser.id, location_id:L2.id, shift_label:sh2, day:d }).then(()=>{}); }
+  if(sel1.length===0 && sel2.length===0){
+    alert('No seleccionaste días.');
+    return;
+  }
 
+  // 2) Inserto en availabilities (idempotente por UNIQUE)
+  for(const d of sel1){
+    await supabase.from('availabilities').insert({ user_id:sessionUser.id, location_id:1, shift_label:sh1, day:d }).then(()=>{});
+  }
+  for(const d of sel2){
+    await supabase.from('availabilities').insert({ user_id:sessionUser.id, location_id:2, shift_label:sh2, day:d }).then(()=>{});
+  }
+
+  // 3) Tomo el perfil fresco desde la DB
+  const { data: fresh } = await supabase.from('profiles').select('*').eq('id', sessionUser.id).maybeSingle();
+  profile = fresh || profile || {};
+
+  // 4) Genero PDF con exactamente los días seleccionados
   genPDFSolicitud({
     profile,
     bloques: [
-      { sede:L1.name, turno:sh1, dias:sel1 },
-      { sede:L2.name, turno:sh2, dias:sel2 }
+      { sede:'Av. Rivadavia 1745', turno:sh1, dias:sel1 },
+      { sede:'Hipólito Yrigoyen 1236', turno:sh2, dias:sel2 }
     ]
   });
 
-  cal[1].selected.clear(); cal[2].selected.clear(); renderCalendar(1); renderCalendar(2); updateSelResume();
+  // 5) Limpio selección visual
+  cal[1].selected.clear(); cal[2].selected.clear();
+  renderCalendar(1); renderCalendar(2); updateSelResume();
+
+  alert('Solicitud registrada. Se generó la planilla en PDF.');
 }
 
-/* ======= PDF: SOLICITUD con formato de planilla ======= */
+/* ======= Helpers PDF ======= */
 function headerPDF(doc, title){
   doc.setFont('helvetica','bold'); doc.setFontSize(13);
   doc.text(title, 14, 16);
   doc.setFontSize(10); doc.setFont('helvetica','normal');
-  doc.text('SECCION SEGURIDAD Y CUSTODIA - AUDITORIA GENERAL DE LA NACIÓN', 14, 22);
+  doc.text('SECCIÓN SEGURIDAD Y CUSTODIA - AUDITORÍA GENERAL DE LA NACIÓN', 14, 22);
   doc.line(14, 25, 196, 25);
 }
-function kv(doc, k, v, x, y){ doc.setFont('helvetica','bold'); doc.text(`${k}:`, x, y); doc.setFont('helvetica','normal'); doc.text(String(v||'-'), x+28, y); }
+function kv(doc, k, v, x, y){
+  doc.setFont('helvetica','bold'); doc.text(k+':', x, y);
+  doc.setFont('helvetica','normal'); doc.text(String(v ?? '-'), x+36, y);
+}
 
+/* ======= PDF SOLICITUD (exacto a lo seleccionado) ======= */
 function genPDFSolicitud({ profile, bloques }){
-  const { jsPDF } = window.jspdf; const doc = new jsPDF();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  // Determinar mes/año según el primer día seleccionado (si no hay, hoy)
+  const allDays = [...(bloques[0]?.dias||[]), ...(bloques[1]?.dias||[])].sort();
+  const base = allDays.length ? new Date(allDays[0]) : new Date();
+  const m = base.getMonth(), y = base.getFullYear();
+  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const labelMes = `${meses[m]} ${y}`;
+
+  // Índice por número de día del MES BASE
+  const dayNum = (isoStr)=>{ const d=new Date(isoStr); return (d.getMonth()===m && d.getFullYear()===y) ? d.getDate() : null; };
+  const tabla = {}; // { 1: { '07-19': ['X1','X2'], '19-07': [] }, ... }
+  const sedeTag = (s)=> /rivadavia/i.test(s) ? 'X1' : /yrigoyen|yirgoyen/i.test(s) ? 'X2' : 'X';
+
+  bloques.forEach(b=>{
+    const tag = sedeTag(b.sede);
+    (b.dias||[]).forEach(d=>{
+      const n = dayNum(d);
+      if(n){
+        tabla[n] = tabla[n] || { '07-19':[], '19-07':[] };
+        if(!tabla[n][b.turno].includes(tag)) tabla[n][b.turno].push(tag);
+      }
+    });
+  });
 
   headerPDF(doc, 'SOLICITUD DE SERVICIOS BAJO EL RÉGIMEN DE POLICÍA ADICIONAL');
 
-  // Datos
-  let y = 32;
-  kv(doc,'NOMBRE Y APELLIDO', profile.full_name,14,y);  y+=6;
-  doc.setFont('helvetica','bold'); doc.text('D.N.I.:',14,y); doc.setFont('helvetica','normal'); doc.text(String(profile.dni||'-'), 40, y);
-  doc.setFont('helvetica','bold'); doc.text('   C.U.I.L.:', 90, y); doc.setFont('helvetica','normal'); doc.text(String(profile.cuil||'-'), 120, y); y+=6;
-  kv(doc,'TELÉFONO', profile.phone,14,y); y+=6;
-  kv(doc,'DIRECCIÓN', `${profile.address||'-'} — ${profile.city||''}`,14,y); y+=8;
+  // Datos personales
+  let y0 = 32;
+  kv(doc,'NOMBRE Y APELLIDO', profile.full_name, 14, y0); y0+=6;
+  doc.setFont('helvetica','bold'); doc.text('D.N.I.:',14,y0);
+  doc.setFont('helvetica','normal'); doc.text(String(profile.dni||'-'), 35, y0);
+  doc.setFont('helvetica','bold'); doc.text('   C.U.I.L.:', 80, y0);
+  doc.setFont('helvetica','normal'); doc.text(String(profile.cuil||'-'), 112, y0);
+  doc.setFont('helvetica','bold'); doc.text('   L.P.:', 150, y0);
+  doc.setFont('helvetica','normal'); doc.text(String(profile.lp||'-'), 165, y0);
+  y0+=6;
 
-  doc.setFont('helvetica','bold'); doc.text('OBJETIVO ASIGNADO',14,y);
-  doc.setFont('helvetica','normal'); doc.text('Rivadavia (X1) — Yrigoyen (X2)', 60, y); y+=8;
+  kv(doc,'CÓDIGO DE DEPENDENCIA', profile.dep_code, 14, y0); y0+=6;
+  kv(doc,'JERARQUÍA', profile.jerarquia, 14, y0); y0+=6;
+  kv(doc,'TELÉFONO', profile.phone, 14, y0); y0+=6;
+  kv(doc,'DOMICILIO', `${profile.address||'-'} — ${profile.city||''}`, 14, y0); y0+=6;
+  kv(doc,'HORARIO ORDINARIO', profile.horario_ordinario || '07.00 a 19.00', 14, y0); y0+=8;
 
-  const now = new Date();
-  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  const labelMes = `${meses[now.getMonth()]} ${now.getFullYear()}`;
-  doc.setFont('helvetica','bold'); doc.text('HORARIO DE SERVICIO ORDINARIO:', 14, y);
-  doc.setFont('helvetica','normal'); doc.text(String(profile.horario_ordinario||'07.00 a 19.00'), 85, y);
-  doc.setFont('helvetica','bold'); doc.text('MES', 140, y); doc.setFont('helvetica','normal'); doc.text(labelMes, 150, y); y+=8;
+  // Cabecera y mes
+  doc.setFont('helvetica','bold'); doc.text('MES:', 14, y0);
+  doc.setFont('helvetica','normal'); doc.text(labelMes, 26, y0); y0+=6;
 
-  doc.setFont('helvetica','bold'); doc.text('DIAS GUARDIA ADICIONAL',14,y); y+=4;
+  // Tabla de días del mes base
+  const startY = y0+2;
+  const xDia=14, x07=35, x19=70, xObs=105, rowH=6;
 
-  // Índices por día del mes actual
-  const month = now.getMonth(), year = now.getFullYear();
-  const getDayNum = (isoStr)=>{ const d=new Date(isoStr); return (d.getMonth()===month && d.getFullYear()===year) ? d.getDate() : null; };
-  const selByDay = {}; // {1:{'07-19':[], '19-07':[]}}
-  const pushMark = (n, turno, lab)=>{ if(!selByDay[n]) selByDay[n]={'07-19':[],'19-07':[]}; if(!selByDay[n][turno].includes(lab)) selByDay[n][turno].push(lab); };
-
-  bloques.forEach(b=>{
-    const label = /rivadavia/i.test(b.sede) ? 'X1' : /yrigoyen|yirgoyen/i.test(b.sede) ? 'X2' : 'X';
-    (b.dias||[]).forEach(d=>{ const n=getDayNum(d); if(n) pushMark(n, b.turno, label); });
-  });
-
-  // Tabla
-  const startY = y+2; const xDia=14, x07=35, x19=70, xObs=105; const rowH=6;
+  // Header de tabla
   doc.rect(xDia-2, startY-5, 180, 7);
-  doc.text('Día', xDia, startY); doc.text('07 a 19', x07, startY); doc.text('19 a 07', x19, startY); doc.text('Observaciones', xObs, startY);
-  let yRow=startY+6;
-  for(let day=1; day<=31; day++){
+  doc.text('Día', xDia, startY);
+  doc.text('07 a 19', x07, startY);
+  doc.text('19 a 07', x19, startY);
+  doc.text('Observaciones', xObs, startY);
+
+  let yRow = startY + 6;
+  // Cantidad de días del mes base
+  const lastDay = new Date(y, m+1, 0).getDate();
+
+  for(let d=1; d<=lastDay; d++){
+    const info = tabla[d] || { '07-19':[], '19-07':[] };
+    const m07 = info['07-19'];
+    const m19 = info['19-07'];
+
     doc.rect(xDia-2, yRow-5, 180, 6);
-    doc.text(String(day), xDia, yRow);
-    const m07=selByDay[day]?.['07-19']||[], m19=selByDay[day]?.['19-07']||[];
+    doc.text(String(d), xDia, yRow);
     if(m07.length) doc.text('X', x07, yRow);
     if(m19.length) doc.text('X', x19, yRow);
-    const obs=[...new Set([...m07,...m19])].join('+'); if(obs) doc.text(obs, xObs, yRow);
-    yRow+=rowH; if(yRow>270){ doc.addPage(); yRow=20; }
+    const obs = [...new Set([...m07, ...m19])].join(' + ');
+    if(obs) doc.text(obs, xObs, yRow);
+
+    yRow += rowH;
+    if (yRow > 270){ doc.addPage(); yRow = 20; }
   }
-  const totalDias = Object.values(selByDay).reduce((a,v)=> a + ((v['07-19'].length||v['19-07'].length)?1:0), 0);
-  yRow+=4; doc.setFont('helvetica','bold'); doc.text(`CANTIDAD DE DÍAS REQUERIDOS: ${totalDias}`,14,yRow); yRow+=10;
-  doc.setFont('helvetica','normal'); doc.text(`FECHA: ${new Date().toLocaleDateString('es-AR')}`,14,yRow); yRow+=10;
-  doc.text('FIRMA: ____________________________    ACLARACIÓN: ____________________________',14,yRow);
+
+  // Totales y firma
+  const totalSeleccionados = Object.values(tabla).reduce((acc, v)=> acc + ((v['07-19'].length || v['19-07'].length) ? 1 : 0), 0);
+  yRow += 6;
+  doc.setFont('helvetica','bold'); doc.text(`CANTIDAD DE DÍAS REQUERIDOS: ${totalSeleccionados}`, 14, yRow); yRow+=10;
+  doc.setFont('helvetica','normal'); doc.text(`FECHA: ${new Date().toLocaleDateString('es-AR')}`, 14, yRow); yRow+=10;
+  doc.text('FIRMA: ____________________________    ACLARACIÓN: ____________________________', 14, yRow);
 
   const fname = `SOLICITUD_SERVICIOS_${(profile.full_name||'usuario').replace(/\s+/g,'_')}_${labelMes.replace(/\s+/g,'_')}.pdf`;
   doc.save(fname);
@@ -628,7 +686,7 @@ async function exportRqCSV(){
   const a=document.createElement('a'); a.href=url; a.download=`solicitudes_${from||''}_${to||''}.csv`; a.click(); URL.revokeObjectURL(url);
 }
 
-/* ============== ADMIN: ASIGNACIONES (panel existente) ============== */
+/* ============== ADMIN: ASIGNACIONES ============== */
 async function loadAdminPool(){
   const day=$$('#admDay').value; const location_id=parseInt($$('#admLocation').value); const shift_label=$$('#admShift').value;
   if(!day||!location_id||!shift_label) return alert('Completá filtros');
