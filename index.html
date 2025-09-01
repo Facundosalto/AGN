@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Vacantes — AGN</title>
+  <title> Vacantes — AGN</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -16,13 +16,7 @@
         #f6f9fc;
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
     }
-    .hero {
-      background: linear-gradient(180deg,#2563eb,#1e3a8a);
-      border-radius: 18px;
-      color: #fff;
-      padding: 24px;
-      box-shadow: 0 14px 30px rgba(2,6,23,.15);
-    }
+    .hero { background: linear-gradient(180deg,#2563eb,#1e3a8a); border-radius: 18px; color:#fff; padding:24px; box-shadow:0 14px 30px rgba(2,6,23,.15) }
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:18px;box-shadow:0 14px 30px rgba(2,6,23,.08)}
     .input{width:100%;padding:12px 14px;border:1px solid #cbd5e1;border-radius:12px;background:#fff}
     .btn{padding:12px 14px;border:1px solid #cbd5e1;border-radius:12px;background:linear-gradient(#ffffff,#eef2ff);box-shadow:0 6px 0 #c7d2fe;transform:translateY(0);transition:.15s}
@@ -95,6 +89,7 @@
         <button data-tab="worker"    class="tab btn">Solicitar días</button>
         <button data-tab="myassign"  class="tab btn">Mis asignaciones</button>
         <button data-tab="admin"     class="tab btn hidden" id="btnTabAdmin">Panel Admin</button>
+        <button data-tab="general"   class="tab btn hidden" id="btnTabGeneral">Calendario general</button>
       </nav>
 
       <!-- WORKER: DOS CALENDARIOS -->
@@ -186,6 +181,29 @@
           </div>
         </div>
       </div>
+
+      <!-- CALENDARIO GENERAL (ADMIN) -->
+      <div id="tab-general" class="card p-6 hidden">
+        <h2 class="text-lg font-semibold mb-2">Calendario general (solicitudes del personal)</h2>
+        <div class="flex items-center gap-2 mb-3">
+          <button class="btn" id="gPrev">←</button>
+          <div id="gTitle" class="font-medium"></div>
+          <button class="btn" id="gNext">→</button>
+          <span class="text-sm text-slate-600">Click en un día para ver quiénes solicitaron</span>
+        </div>
+        <div class="calendar" id="gCal"></div>
+      </div>
+
+      <!-- Modal general -->
+      <div id="gModal" class="fixed inset-0 bg-black/30 hidden items-center justify-center">
+        <div class="bg-white rounded-xl p-4 w-[520px] max-w-[95%]">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-medium" id="gModalTitle">Solicitudes</h3>
+            <button class="btn" id="gClose">Cerrar</button>
+          </div>
+          <div id="gList" class="text-sm"></div>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -207,10 +225,12 @@ const L2 = { id:2, name:'Hipólito Yrigoyen 1236' };
 /* ============== STATE ============== */
 let sessionUser=null, profile=null;
 const cal = {
-  // cada calendario tiene año/mes y un set de fechas seleccionadas
   1: { y:new Date().getFullYear(), m:new Date().getMonth(), selected:new Set() },
   2: { y:new Date().getFullYear(), m:new Date().getMonth(), selected:new Set() }
 };
+// General (admin)
+let gYear = new Date().getFullYear();
+let gMonth = new Date().getMonth();
 
 /* ============== INIT ============== */
 (async function(){
@@ -221,10 +241,12 @@ const cal = {
   $$('#logoutBtn').addEventListener('click', logout);
 
   // tabs
-  $$$('.tab').forEach(b=> b.addEventListener('click',()=> {
-    const t=b.dataset.tab; ['worker','myassign','admin'].forEach(n=> $$('#tab-'+n)?.classList.toggle('hidden', n!==t));
+  $$$('.tab').forEach(b=> b.addEventListener('click',async ()=>{
+    const t=b.dataset.tab;
+    openTab(t);
     if(t==='worker'){ renderCalendar(1); renderCalendar(2); updateSelResume(); }
     if(t==='myassign') loadMyAssign();
+    if(t==='general') await renderGeneralCalendar();
   }));
 
   // calendars nav
@@ -239,6 +261,11 @@ const cal = {
   $$('#btnLoadPool').addEventListener('click', loadAdminPool);
   $$('#btnExport').addEventListener('click', exportCSV);
 
+  // general modal
+  $$('#gPrev').addEventListener('click', ()=>{ gMonth--; if(gMonth<0){gMonth=11;gYear--;} renderGeneralCalendar(); });
+  $$('#gNext').addEventListener('click', ()=>{ gMonth++; if(gMonth>11){gMonth=0; gYear++;} renderGeneralCalendar(); });
+  $$('#gClose').addEventListener('click', ()=>{ $$('#gModal').classList.add('hidden'); $$('#gModal').classList.remove('flex'); });
+
   // session
   const { data:{ session } } = await supabase.auth.getSession();
   if(session?.user) await onLogin(session.user); else { showAuth(true); }
@@ -246,7 +273,7 @@ const cal = {
 })();
 
 /* ============== AUTH ============== */
-async function auth(e, signup=false){
+async function auth(e){
   e.preventDefault();
   const email=$$('#email').value.trim(), password=$$('#password').value.trim(), msg=$$('#authMsg');
   if(!email||!password){ msg.textContent='Completá email y contraseña'; msg.className='text-red-600'; return; }
@@ -278,10 +305,7 @@ async function signUpFull(e){
     if(res.error) throw res.error;
     const u = res.data.user;
     if(u){
-      // guardar extra en profiles (RLS: auth.uid()=id)
-      await supabase.from('profiles').upsert({
-        id: u.id, full_name, dni, cuil, phone, address, city, notes
-      }, { onConflict:'id' });
+      await supabase.from('profiles').upsert({ id: u.id, full_name, dni, cuil, phone, address, city, notes }, { onConflict:'id' });
       msg.textContent='Cuenta creada.'; msg.className='text-emerald-600';
       await onLogin(u);
     }
@@ -302,18 +326,19 @@ async function onLogin(u){
   $$('#userName').textContent = `${u.email} — rol: ${profile.role||'worker'}`;
   showAuth(false);
 
-  // admin tabs
+  // mostrar tabs admin
   const isAdmin = profile?.role==='admin';
   $$('#btnTabAdmin').classList.toggle('hidden', !isAdmin);
+  $$('#btnTabGeneral').classList.toggle('hidden', !isAdmin);
 
-  // cargar selects admin (ubicaciones)
+  // selects admin
   const sel=$$('#admLocation'); sel.innerHTML='';
   [L1,L2].forEach(l=>{ const o=document.createElement('option'); o.value=l.id; o.textContent=`${l.id} — ${l.name}`; sel.appendChild(o); });
-  const t=new Date(); $$('#admDay').valueAsDate=t;
+  $$('#admDay').valueAsDate=new Date();
 
-  // por defecto abrir worker
-  ['worker','myassign','admin'].forEach(n=> $$('#tab-'+n)?.classList.add('hidden'));
-  $$('#tab-worker')?.classList.remove('hidden');
+  // abrir
+  openTab(isAdmin ? 'general' : 'worker');
+  if(isAdmin) await renderGeneralCalendar();
   renderCalendar(1); renderCalendar(2); updateSelResume();
 }
 
@@ -325,7 +350,11 @@ function showAuth(show){
   $$('#app').classList.toggle('hidden', show);
 }
 
-/* ============== CALENDARIOS ============== */
+function openTab(name){
+  ['worker','myassign','admin','general'].forEach(n=> $$('#tab-'+n)?.classList.toggle('hidden', n!==name));
+}
+
+/* ============== CALENDARIOS WORKER ============== */
 function moveMonth(calId, delta){
   cal[calId].m += delta;
   if(cal[calId].m<0){ cal[calId].m=11; cal[calId].y--; }
@@ -366,7 +395,7 @@ function updateSelResume(){
   $$('#selResume').textContent = `Rivadavia: ${c1} día(s) — Yrigoyen: ${c2} día(s)`;
 }
 
-/* ============== SOLICITUD (carga + PDF) ============== */
+/* ============== SOLICITUD (carga + PDF PLANILLA) ============== */
 async function solicitarDias(){
   if(!sessionUser) return;
   const sel1=[...cal[1].selected].sort();
@@ -374,11 +403,9 @@ async function solicitarDias(){
   const sh1 = (document.querySelector('input[name="sh1"]:checked')?.value)||'07-19';
   const sh2 = (document.querySelector('input[name="sh2"]:checked')?.value)||'07-19';
 
-  // insertar disponibilidades
   for(const d of sel1){ await supabase.from('availabilities').insert({ user_id:sessionUser.id, location_id:L1.id, shift_label:sh1, day:d }).then(()=>{}); }
   for(const d of sel2){ await supabase.from('availabilities').insert({ user_id:sessionUser.id, location_id:L2.id, shift_label:sh2, day:d }).then(()=>{}); }
 
-  // PDF Solicitud
   genPDFSolicitud({
     profile,
     bloques: [
@@ -387,8 +414,76 @@ async function solicitarDias(){
     ]
   });
 
-  // limpiar selección
   cal[1].selected.clear(); cal[2].selected.clear(); renderCalendar(1); renderCalendar(2); updateSelResume();
+}
+
+/* ======= PDF: SOLICITUD con formato de planilla ======= */
+function headerPDF(doc, title){
+  doc.setFont('helvetica','bold'); doc.setFontSize(13);
+  doc.text(title, 14, 16);
+  doc.setFontSize(10); doc.setFont('helvetica','normal');
+  doc.text('SECCION SEGURIDAD Y CUSTODIA - AUDITORIA GENERAL DE LA NACIÓN', 14, 22);
+  doc.line(14, 25, 196, 25);
+}
+function kv(doc, k, v, x, y){ doc.setFont('helvetica','bold'); doc.text(`${k}:`, x, y); doc.setFont('helvetica','normal'); doc.text(String(v||'-'), x+28, y); }
+
+function genPDFSolicitud({ profile, bloques }){
+  const { jsPDF } = window.jspdf; const doc = new jsPDF();
+
+  headerPDF(doc, 'SOLICITUD DE SERVICIOS BAJO EL RÉGIMEN DE POLICÍA ADICIONAL');
+
+  // Datos
+  let y = 32;
+  kv(doc,'NOMBRE Y APELLIDO', profile.full_name,14,y);  y+=6;
+  doc.setFont('helvetica','bold'); doc.text('D.N.I.:',14,y); doc.setFont('helvetica','normal'); doc.text(String(profile.dni||'-'), 40, y);
+  doc.setFont('helvetica','bold'); doc.text('   C.U.I.L.:', 90, y); doc.setFont('helvetica','normal'); doc.text(String(profile.cuil||'-'), 120, y); y+=6;
+  kv(doc,'TELÉFONO', profile.phone,14,y); y+=6;
+  kv(doc,'DIRECCIÓN', `${profile.address||'-'} — ${profile.city||''}`,14,y); y+=8;
+
+  doc.setFont('helvetica','bold'); doc.text('OBJETIVO ASIGNADO',14,y);
+  doc.setFont('helvetica','normal'); doc.text('Rivadavia (X1) — Yrigoyen (X2)', 60, y); y+=8;
+
+  const now = new Date();
+  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const labelMes = `${meses[now.getMonth()]} ${now.getFullYear()}`;
+  doc.setFont('helvetica','bold'); doc.text('HORARIO DE SERVICIO ORDINARIO:', 14, y);
+  doc.setFont('helvetica','normal'); doc.text('07.00 a 19.00 hs.', 85, y);
+  doc.setFont('helvetica','bold'); doc.text('MES', 140, y); doc.setFont('helvetica','normal'); doc.text(labelMes, 150, y); y+=8;
+
+  doc.setFont('helvetica','bold'); doc.text('DIAS GUARDIA ADICIONAL',14,y); y+=4;
+
+  // Índices por día del mes actual
+  const month = now.getMonth(), year = now.getFullYear();
+  const getDayNum = (isoStr)=>{ const d=new Date(isoStr); return (d.getMonth()===month && d.getFullYear()===year) ? d.getDate() : null; };
+  const selByDay = {}; // {1:{'07-19':[], '19-07':[]}}
+  const pushMark = (n, turno, lab)=>{ if(!selByDay[n]) selByDay[n]={'07-19':[],'19-07':[]}; if(!selByDay[n][turno].includes(lab)) selByDay[n][turno].push(lab); };
+
+  bloques.forEach(b=>{
+    const label = /rivadavia/i.test(b.sede) ? 'X1' : /yrigoyen|yirgoyen/i.test(b.sede) ? 'X2' : 'X';
+    (b.dias||[]).forEach(d=>{ const n=getDayNum(d); if(n) pushMark(n, b.turno, label); });
+  });
+
+  // Tabla
+  const startY = y+2; const xDia=14, x07=35, x19=70, xObs=105; const rowH=6;
+  doc.rect(xDia-2, startY-5, 180, 7);
+  doc.text('Día', xDia, startY); doc.text('07 a 19', x07, startY); doc.text('19 a 07', x19, startY); doc.text('Observaciones', xObs, startY);
+  let yRow=startY+6;
+  for(let day=1; day<=31; day++){
+    doc.rect(xDia-2, yRow-5, 180, 6);
+    doc.text(String(day), xDia, yRow);
+    const m07=selByDay[day]?.['07-19']||[], m19=selByDay[day]?.['19-07']||[];
+    if(m07.length) doc.text('X', x07, yRow);
+    if(m19.length) doc.text('X', x19, yRow);
+    const obs=[...new Set([...m07,...m19])].join('+'); if(obs) doc.text(obs, xObs, yRow);
+    yRow+=rowH; if(yRow>270){ doc.addPage(); yRow=20; }
+  }
+  const totalDias = Object.values(selByDay).reduce((a,v)=> a + ((v['07-19'].length||v['19-07'].length)?1:0), 0);
+  yRow+=4; doc.setFont('helvetica','bold'); doc.text(`CANTIDAD DE DÍAS REQUERIDOS: ${totalDias}`,14,yRow); yRow+=10;
+  doc.setFont('helvetica','normal'); doc.text(`FECHA: ${new Date().toLocaleDateString('es-AR')}`,14,yRow); yRow+=10;
+  doc.text('FIRMA: ____________________________    ACLARACIÓN: ____________________________',14,yRow);
+
+  const fname = `SOLICITUD_SERVICIOS_${(profile.full_name||'usuario').replace(/\s+/g,'_')}_${labelMes.replace(/\s+/g,'_')}.pdf`;
+  doc.save(fname);
 }
 
 /* ============== MIS ASIGNACIONES ============== */
@@ -402,16 +497,14 @@ async function loadMyAssign(){
   });
 }
 
-/* ============== ADMIN ============== */
+/* ============== ADMIN PANEL ============== */
 async function loadAdminPool(){
   const day=$$('#admDay').value; const location_id=parseInt($$('#admLocation').value); const shift_label=$$('#admShift').value;
   if(!day||!location_id||!shift_label) return alert('Completá filtros');
 
-  // capacidad
   const { data: cap } = await supabase.from('vacancy_status').select('*').eq('day', day).eq('location_id', location_id).eq('shift_label', shift_label).maybeSingle();
   $$('#capacityBox').innerHTML = cap? `<div class="chip">Cupos: ${cap.cupos} — Ocupados: ${cap.ocupados} — Disponibles: ${cap.disponibles}</div>` : '<div class="chip">Sin regla cargada</div>';
 
-  // pool
   const { data: pool } = await supabase.from('availabilities').select('user_id, profiles(full_name,email)').eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label).order('created_at');
   const body=$$('#pool'); body.innerHTML='';
   (pool||[]).forEach(r=>{
@@ -421,7 +514,6 @@ async function loadAdminPool(){
     body.appendChild(tr);
   });
 
-  // asignados
   const { data: assigned } = await supabase.from('assignments').select('id,user_id,status,profiles(full_name,email)').eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label).order('created_at');
   const as=$$('#assigned'); as.innerHTML='';
   (assigned||[]).forEach(r=>{
@@ -436,22 +528,19 @@ async function loadAdminPool(){
     as.appendChild(tr);
   });
 
-  // listeners
   $$$('#pool [data-add]').forEach(b=> b.addEventListener('click', ()=> addAssignment(b.dataset.add, day, location_id, shift_label)));
-  $$$('#assigned [data-confirm]').forEach(b=> b.addEventListener('click', ()=> updateAssignmentStatus(parseInt(b.dataset.confirm), 'confirmado').then(loadAdminPool)));
-  $$$('#assigned [data-del]').forEach(b=> b.addEventListener('click', ()=> deleteAssignment(parseInt(b.dataset.del)).then(loadAdminPool)));
+  $$$('#assigned [data-confirm]').forEach(b=> b.addEventListener('click', async()=>{ await updateAssignmentStatus(parseInt(b.dataset.confirm), 'confirmado'); loadAdminPool(); }));
+  $$$('#assigned [data-del]').forEach(b=> b.addEventListener('click', async()=>{ await deleteAssignment(parseInt(b.dataset.del)); loadAdminPool(); }));
   $$$('#assigned [data-send]').forEach(b=> b.addEventListener('click', ()=> sendAsignacion(b.dataset.send, day, location_id, shift_label)));
 }
-
 async function addAssignment(user_id, day, location_id, shift_label){
   const { data: cap } = await supabase.from('vacancy_status').select('*').eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label).maybeSingle();
   if(cap && cap.disponibles<=0) return alert('No hay cupos disponibles.');
   await supabase.from('assignments').insert({ user_id, day, location_id, shift_label, status:'propuesto', created_by: sessionUser.id });
   await loadAdminPool();
 }
-async function updateAssignmentStatus(id,status){ return supabase.from('assignments').update({ status }).eq('id', id); }
-async function deleteAssignment(id){ return supabase.from('assignments').delete().eq('id', id); }
-
+function updateAssignmentStatus(id,status){ return supabase.from('assignments').update({ status }).eq('id', id); }
+function deleteAssignment(id){ return supabase.from('assignments').delete().eq('id', id); }
 async function exportCSV(){
   const day=$$('#admDay').value; const location_id=parseInt($$('#admLocation').value); const shift_label=$$('#admShift').value;
   const { data } = await supabase.from('assignments').select('day,shift_label,status,profiles(full_name,email),locations(name)').eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label);
@@ -461,48 +550,8 @@ async function exportCSV(){
   const a=document.createElement('a'); a.href=url; a.download=`asignaciones_${day}_${location_id}_${shift_label}.csv`; a.click(); URL.revokeObjectURL(url);
 }
 
-/* ============== PDF GENERATORS ============== */
-function headerPDF(doc, title){
-  doc.setFont('helvetica','bold'); doc.setFontSize(16);
-  doc.text(title, 14, 18);
-  doc.setFont('helvetica','normal'); doc.setFontSize(10);
-  doc.text('CRM Vacantes — AGN', 14, 25);
-  doc.line(14, 28, 196, 28);
-}
-
-function kv(doc, k, v, x, y){ doc.setFont('helvetica','bold'); doc.text(`${k}:`, x, y); doc.setFont('helvetica','normal'); doc.text(String(v||'-'), x+28, y); }
-
-function genPDFSolicitud({ profile, bloques }){
-  const { jsPDF } = window.jspdf; const doc = new jsPDF();
-  headerPDF(doc, 'SOLICITUD DE SERVICIOS');
-  let y = 36;
-  kv(doc,'Nombre',profile.full_name,14,y);  y+=6;
-  kv(doc,'DNI',profile.dni,14,y);           y+=6;
-  kv(doc,'CUIL',profile.cuil,14,y);         y+=6;
-  kv(doc,'Teléfono',profile.phone,14,y);    y+=6;
-  kv(doc,'Dirección',profile.address,14,y); y+=6;
-  kv(doc,'Ciudad',profile.city,14,y);       y+=10;
-
-  doc.setFont('helvetica','bold'); doc.text('DÍAS SOLICITADOS', 14, y); y+=4;
-  doc.setFont('helvetica','normal');
-  bloques.forEach(b=>{
-    if(!b.dias || !b.dias.length) return;
-    doc.text(`• ${b.sede} — Turno ${b.turno}`, 14, y); y+=5;
-    const lines = b.dias.join(', ');
-    const chunk = doc.splitTextToSize(lines, 180);
-    doc.text(chunk, 18, y); y += (chunk.length*5)+2;
-  });
-
-  y += 8;
-  doc.text('Declaro que la información proporcionada es verdadera.', 14, y); y+=14;
-  doc.text('Firma del solicitante: ____________________________', 14, y);
-
-  const fname = `Solicitud_${(profile.full_name||'usuario').replace(/\s+/g,'_')}.pdf`;
-  doc.save(fname);
-}
-
+/* ======= PDF: ASIGNACIÓN (simple con firma digital textual) ======= */
 async function sendAsignacion(user_id, day, location_id, shift_label){
-  // traer perfil y todas las asignaciones confirmadas del usuario (día actual por simplicidad)
   const { data: prof } = await supabase.from('profiles').select('*').eq('id', user_id).maybeSingle();
   const { data: rows } = await supabase.from('assignments').select('day,shift_label,status,locations(name)').eq('user_id',user_id).eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label).in('status',['propuesto','confirmado']).order('day');
 
@@ -525,8 +574,53 @@ async function sendAsignacion(user_id, day, location_id, shift_label){
   doc.text(`Firmado digitalmente por AGN — ${iso(new Date())}`, 14, y); y+=6;
   doc.text('Este documento fue generado automáticamente por el sistema.', 14, y);
 
-  const fname = `Asignacion_${(prof?.full_name||'usuario').replace(/\s+/g,'_')}_${day}.pdf`;
+  const fname = `ASIGNACION_${(prof?.full_name||'usuario').replace(/\s+/g,'_')}_${day}.pdf`;
   doc.save(fname);
+}
+
+/* ============== CALENDARIO GENERAL (ADMIN) ============== */
+async function renderGeneralCalendar(){
+  const title = monthTitle(gYear, gMonth);
+  $$('#gTitle').textContent = title;
+
+  const box = $$('#gCal'); box.innerHTML='';
+  ['L','M','M','J','V','S','D'].forEach(h=>{ const d=document.createElement('div'); d.className='cal-head'; d.textContent=h; box.appendChild(d); });
+
+  const from = new Date(gYear, gMonth, 1);
+  const to   = new Date(gYear, gMonth+1, 0);
+  const { data } = await supabase.from('availabilities').select('day, shift_label, location_id, profiles(full_name)').gte('day', iso(from)).lte('day', iso(to));
+
+  const byDay = {};
+  (data||[]).forEach(r=>{
+    byDay[r.day] = byDay[r.day] || [];
+    byDay[r.day].push({ name:r.profiles?.full_name||'(sin nombre)', location_id:r.location_id, shift_label:r.shift_label });
+  });
+
+  const start = firstCell(gYear, gMonth);
+  for(let i=0;i<42;i++){
+    const d = new Date(start); d.setDate(start.getDate()+i);
+    const key = iso(d);
+    const inMonth = d.getMonth()===gMonth;
+    const lst = byDay[key] || [];
+    const count = lst.length;
+
+    const div=document.createElement('div');
+    div.className='cal-cell'+(inMonth?' clickable':' disabled');
+    div.innerHTML = `<div class="d">${d.getDate()}</div><div>${count? `<span class="chip">${count} solicitud(es)</span>`:''}</div>`;
+    if(inMonth){
+      div.addEventListener('click', ()=>{
+        $$('#gModal').classList.remove('hidden'); $$('#gModal').classList.add('flex');
+        $$('#gModalTitle').textContent = `Solicitudes — ${key}`;
+        if(!count){ $$('#gList').innerHTML = '<div class="text-slate-500">Sin solicitudes.</div>'; return; }
+        const rows = lst.map(x=>{
+          const sede = x.location_id===1 ? 'Rivadavia (X1)' : x.location_id===2 ? 'Yrigoyen (X2)' : `Loc ${x.location_id}`;
+          return `<div class="py-1 border-b last:border-0">${x.name} — ${sede} — ${x.shift_label}</div>`;
+        }).join('');
+        $$('#gList').innerHTML = rows;
+      });
+    }
+    box.appendChild(div);
+  }
 }
 </script>
 </body>
