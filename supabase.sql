@@ -1,4 +1,4 @@
--- Tipos (seguros ante múltiples ejecuciones)
+-- ============ TIPOS ENUM ============
 DO $$ BEGIN
   CREATE TYPE public.user_role AS ENUM ('admin','worker');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -11,7 +11,7 @@ DO $$ BEGIN
   CREATE TYPE public.day_kind AS ENUM ('habil','finde_fer','todos');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- Perfiles (1:1 con auth.users)
+-- ============ PROFILES ============
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT,
@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Trigger para crear profile en signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
@@ -35,7 +34,7 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Maestras: ubicaciones
+-- ============ MAESTRAS ============
 CREATE TABLE IF NOT EXISTS public.locations (
   id SMALLSERIAL PRIMARY KEY,
   name TEXT NOT NULL
@@ -44,7 +43,6 @@ INSERT INTO public.locations (name)
 VALUES ('Ubicación 1'), ('Ubicación 2')
 ON CONFLICT DO NOTHING;
 
--- Maestras: turnos
 CREATE TABLE IF NOT EXISTS public.shifts (
   id SMALLSERIAL PRIMARY KEY,
   label TEXT UNIQUE NOT NULL CHECK (label IN ('07-19','19-07')),
@@ -56,7 +54,7 @@ INSERT INTO public.shifts (label, start_time, end_time) VALUES
 ('19-07','19:00','07:00')
 ON CONFLICT (label) DO NOTHING;
 
--- Reglas de cupos
+-- ============ REGLAS DE CUPOS ============
 CREATE TABLE IF NOT EXISTS public.vacancy_rules (
   id BIGSERIAL PRIMARY KEY,
   location_id SMALLINT REFERENCES public.locations(id) ON DELETE CASCADE,
@@ -66,24 +64,21 @@ CREATE TABLE IF NOT EXISTS public.vacancy_rules (
   UNIQUE(location_id, shift_label, day_kind)
 );
 
--- Cargar reglas pedidas (idempotente)
 INSERT INTO public.vacancy_rules (location_id, shift_label, day_kind, cupos) VALUES
--- Ubicación 1
 (1,'07-19','habil',5),
 (1,'07-19','finde_fer',2),
 (1,'19-07','todos',3),
--- Ubicación 2
 (2,'07-19','habil',2),
 (2,'07-19','finde_fer',1),
 (2,'19-07','todos',1)
 ON CONFLICT (location_id, shift_label, day_kind) DO UPDATE SET cupos = EXCLUDED.cupos;
 
--- Feriados
+-- ============ FERIADOS ============
 CREATE TABLE IF NOT EXISTS public.holidays (
   day DATE PRIMARY KEY
 );
 
--- Solicitudes de disponibilidad
+-- ============ DISPONIBILIDADES ============
 CREATE TABLE IF NOT EXISTS public.availabilities (
   id BIGSERIAL PRIMARY KEY,
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -94,7 +89,7 @@ CREATE TABLE IF NOT EXISTS public.availabilities (
   UNIQUE(user_id, location_id, shift_label, day)
 );
 
--- Asignaciones
+-- ============ ASIGNACIONES ============
 CREATE TABLE IF NOT EXISTS public.assignments (
   id BIGSERIAL PRIMARY KEY,
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -107,13 +102,13 @@ CREATE TABLE IF NOT EXISTS public.assignments (
   UNIQUE(user_id, location_id, shift_label, day)
 );
 
--- Helper: ¿es finde o feriado?
+-- ============ FUNCIONES ============
 CREATE OR REPLACE FUNCTION public.is_weekend_or_holiday(d DATE)
 RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
   SELECT EXTRACT(ISODOW FROM d) IN (6,7) OR EXISTS (SELECT 1 FROM public.holidays h WHERE h.day = d);
 $$;
 
--- Capacidad teórica por día/sede/turno
+-- ============ VISTAS ============
 CREATE OR REPLACE VIEW public.vacancy_capacity AS
 SELECT
   g.d::date AS day,
@@ -137,32 +132,57 @@ FROM generate_series((now() - interval '30 days')::date, (now() + interval '180 
 CROSS JOIN public.locations l
 CROSS JOIN public.shifts s;
 
--- Estado de vacantes
 CREATE OR REPLACE VIEW public.vacancy_status AS
 SELECT
   vc.day,
   vc.location_id,
   vc.shift_label,
   vc.cupos,
-  (
-    SELECT COUNT(*)
-    FROM public.assignments a
-    WHERE a.day = vc.day
-      AND a.location_id = vc.location_id
-      AND a.shift_label = vc.shift_label
-      AND a.status IN ('propuesto','confirmado')
-  ) AS ocupados,
-  vc.cupos - (
-    SELECT COUNT(*)
-    FROM public.assignments a
-    WHERE a.day = vc.day
-      AND a.location_id = vc.location_id
-      AND a.shift_label = vc.shift_label
-      AND a.status IN ('propuesto','confirmado')
-  ) AS disponibles
+  (SELECT COUNT(*) FROM public.assignments a
+     WHERE a.day=vc.day AND a.location_id=vc.location_id AND a.shift_label=vc.shift_label
+       AND a.status IN ('propuesto','confirmado')) AS ocupados,
+  vc.cupos - (SELECT COUNT(*) FROM public.assignments a
+     WHERE a.day=vc.day AND a.location_id=vc.location_id AND a.shift_label=vc.shift_label
+       AND a.status IN ('propuesto','confirmado')) AS disponibles
 FROM public.vacancy_capacity vc;
 
--- RLS
+-- NUEVA VISTA: historial completo por persona (disponibilidades + asignaciones)
+CREATE OR REPLACE VIEW public.v_user_activity AS
+SELECT
+  'disponibilidad'::text AS kind,
+  v.id,
+  v.created_at,
+  v.day,
+  v.user_id,
+  p.full_name,
+  u.email,
+  v.location_id,
+  l.name AS location_name,
+  v.shift_label,
+  NULL::public.assign_status AS status
+FROM public.availabilities v
+JOIN public.profiles p ON p.id = v.user_id
+JOIN auth.users u ON u.id = v.user_id
+JOIN public.locations l ON l.id = v.location_id
+UNION ALL
+SELECT
+  'asignacion'::text AS kind,
+  a.id,
+  a.created_at,
+  a.day,
+  a.user_id,
+  p.full_name,
+  u.email,
+  a.location_id,
+  l.name AS location_name,
+  a.shift_label,
+  a.status
+FROM public.assignments a
+JOIN public.profiles p ON p.id = a.user_id
+JOIN auth.users u ON u.id = a.user_id
+JOIN public.locations l ON l.id = a.location_id;
+
+-- ============ RLS ============
 ALTER TABLE public.profiles       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.availabilities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.assignments    ENABLE ROW LEVEL SECURITY;
@@ -224,10 +244,19 @@ CREATE POLICY holi_write_admin ON public.holidays FOR ALL USING (
   EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
 );
 
--- Permisos de lectura a las views
-GRANT SELECT ON public.vacancy_capacity, public.vacancy_status TO authenticated;
+-- ============ PERMISOS ============
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT ON public.locations, public.shifts TO authenticated;
+GRANT SELECT, UPDATE ON public.profiles TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.availabilities TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.assignments   TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.vacancy_rules TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.holidays      TO authenticated;
 
--- RPC para dashboard/calendario
+-- Lectura de vistas
+GRANT SELECT ON public.vacancy_capacity, public.vacancy_status, public.v_user_activity TO authenticated;
+
+-- ============ RPC ============
 CREATE OR REPLACE FUNCTION public.vacancy_status_range(
   start_d date,
   end_d   date,
