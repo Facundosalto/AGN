@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title> Vacantes — AGN</title>
+  <title>CRM Vacantes — Supabase</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -39,15 +39,16 @@
   <div class="max-w-6xl mx-auto p-4 md:p-8">
     <!-- Header -->
     <div class="hero mb-6">
-      <h1 class="text-3xl font-bold"> Vacantes — AGN</h1>
+      <h1 class="text-3xl font-bold">CRM Vacantes — Supabase</h1>
       <p class="opacity-90">Gestión de disponibilidad y asignaciones de personal</p>
     </div>
 
     <div class="flex items-center justify-between mb-4">
       <div class="text-sm secure px-3 py-1 rounded-lg">🔒 Tus datos están seguros (Auth + RLS)</div>
       <div id="userBox" class="hidden items-center gap-3">
+        <button id="btnProfile" type="button" class="btn">Mis datos</button>
         <span id="userName" class="chip"></span>
-        <button id="logoutBtn" class="btn">Salir</button>
+        <button id="logoutBtn" type="button" class="btn">Salir</button>
       </div>
     </div>
 
@@ -86,10 +87,12 @@
     <!-- APP -->
     <section id="app" class="hidden">
       <nav class="flex flex-wrap gap-2 mb-4">
-        <button data-tab="worker"    class="tab btn">Solicitar días</button>
-        <button data-tab="myassign"  class="tab btn">Mis asignaciones</button>
-        <button data-tab="admin"     class="tab btn hidden" id="btnTabAdmin">Panel Admin</button>
-        <button data-tab="general"   class="tab btn hidden" id="btnTabGeneral">Calendario general</button>
+        <button data-tab="worker"          class="tab btn">Solicitar días</button>
+        <button data-tab="myassign"        class="tab btn">Mis asignaciones</button>
+        <button data-tab="profile"         class="tab btn">Mis datos</button>
+        <button data-tab="admin-req"       class="tab btn hidden" id="btnTabReq">Solicitudes (Admin)</button>
+        <button data-tab="admin-assign"    class="tab btn hidden" id="btnTabAdmin">Asignaciones (Admin)</button>
+        <button data-tab="general"         class="tab btn hidden" id="btnTabGeneral">Calendario general</button>
       </nav>
 
       <!-- WORKER: DOS CALENDARIOS -->
@@ -148,9 +151,54 @@
         </table>
       </div>
 
-      <!-- ADMIN -->
-      <div id="tab-admin" class="card p-6 hidden">
-        <h2 class="text-lg font-semibold mb-4">Panel de administración</h2>
+      <!-- MIS DATOS -->
+      <div id="tab-profile" class="card p-6 hidden">
+        <h2 class="text-lg font-semibold mb-4">Mis datos</h2>
+        <div class="grid md:grid-cols-3 gap-3">
+          <input id="pf_full_name"  class="input" placeholder="Nombre y apellido" />
+          <input id="pf_dni"        class="input" placeholder="DNI" />
+          <input id="pf_lp"         class="input" placeholder="LP" />
+          <input id="pf_dep_code"   class="input" placeholder="Código de dependencia" />
+          <input id="pf_jerarquia"  class="input" placeholder="Jerarquía" />
+          <input id="pf_horario"    class="input" placeholder="Horario ordinario (ej: 08-16)" />
+          <input id="pf_phone"      class="input" placeholder="Teléfono" />
+          <input id="pf_address"    class="input" placeholder="Dirección" />
+          <input id="pf_city"       class="input" placeholder="Ciudad" />
+          <textarea id="pf_notes"   class="input md:col-span-3" rows="2" placeholder="Notas"></textarea>
+        </div>
+        <div class="mt-3">
+          <button id="btnSaveProfile" class="btn-primary">Guardar mis datos</button>
+        </div>
+      </div>
+
+      <!-- ADMIN: SOLICITUDES -->
+      <div id="tab-admin-req" class="card p-6 hidden">
+        <h2 class="text-lg font-semibold mb-4">Solicitudes del personal</h2>
+        <div class="grid md:grid-cols-6 gap-3 mb-4">
+          <input id="rqFrom" type="date" class="input" />
+          <input id="rqTo" type="date" class="input" />
+          <select id="rqLocation" class="input"></select>
+          <select id="rqShift" class="input">
+            <option value="">(Todos)</option>
+            <option value="07-19">07–19</option>
+            <option value="19-07">19–07</option>
+          </select>
+          <input id="rqSearch" class="input" placeholder="Buscar por nombre…" />
+          <button id="btnRqLoad" class="btn">Actualizar</button>
+        </div>
+        <div class="mb-3 text-sm" id="rqResume">—</div>
+        <table class="w-full text-sm">
+          <thead><tr class="text-left"><th class="py-2">Fecha</th><th>Nombre</th><th>Ubicación</th><th>Turno</th></tr></thead>
+          <tbody id="rqTable"></tbody>
+        </table>
+        <div class="mt-3">
+          <button id="btnRqExport" class="btn">Exportar CSV</button>
+        </div>
+      </div>
+
+      <!-- ADMIN: ASIGNACIONES (panel existente) -->
+      <div id="tab-admin-assign" class="card p-6 hidden">
+        <h2 class="text-lg font-semibold mb-4">Asignaciones (Admin)</h2>
         <div class="grid md:grid-cols-5 gap-3 mb-4">
           <input id="admDay" type="date" class="input" />
           <select id="admLocation" class="input"></select>
@@ -228,7 +276,6 @@ const cal = {
   1: { y:new Date().getFullYear(), m:new Date().getMonth(), selected:new Set() },
   2: { y:new Date().getFullYear(), m:new Date().getMonth(), selected:new Set() }
 };
-// General (admin)
 let gYear = new Date().getFullYear();
 let gMonth = new Date().getMonth();
 
@@ -239,6 +286,7 @@ let gMonth = new Date().getMonth();
   $$('#showSignup').addEventListener('click', ()=> $$('#signupCard').classList.toggle('hidden'));
   $$('#signUpBtn').addEventListener('click', signUpFull);
   $$('#logoutBtn').addEventListener('click', logout);
+  $$('#btnProfile').addEventListener('click', ()=> openTab('profile'));
 
   // tabs
   $$$('.tab').forEach(b=> b.addEventListener('click',async ()=>{
@@ -246,6 +294,9 @@ let gMonth = new Date().getMonth();
     openTab(t);
     if(t==='worker'){ renderCalendar(1); renderCalendar(2); updateSelResume(); }
     if(t==='myassign') loadMyAssign();
+    if(t==='profile')  loadMyProfile();
+    if(t==='admin-req') await loadAdminRequests();
+    if(t==='admin-assign') {/* nada; se usa Ver solicitudes */ }
     if(t==='general') await renderGeneralCalendar();
   }));
 
@@ -257,9 +308,16 @@ let gMonth = new Date().getMonth();
 
   $$('#btnSolicitar').addEventListener('click', solicitarDias);
 
-  // admin
+  // profile
+  $$('#btnSaveProfile').addEventListener('click', saveMyProfile);
+
+  // admin assign
   $$('#btnLoadPool').addEventListener('click', loadAdminPool);
   $$('#btnExport').addEventListener('click', exportCSV);
+
+  // admin requests
+  $$('#btnRqLoad').addEventListener('click', loadAdminRequests);
+  $$('#btnRqExport').addEventListener('click', exportRqCSV);
 
   // general modal
   $$('#gPrev').addEventListener('click', ()=>{ gMonth--; if(gMonth<0){gMonth=11;gYear--;} renderGeneralCalendar(); });
@@ -329,21 +387,26 @@ async function onLogin(u){
   // mostrar tabs admin
   const isAdmin = profile?.role==='admin';
   $$('#btnTabAdmin').classList.toggle('hidden', !isAdmin);
+  $$('#btnTabReq').classList.toggle('hidden', !isAdmin);
   $$('#btnTabGeneral').classList.toggle('hidden', !isAdmin);
 
   // selects admin
   const sel=$$('#admLocation'); sel.innerHTML='';
   [L1,L2].forEach(l=>{ const o=document.createElement('option'); o.value=l.id; o.textContent=`${l.id} — ${l.name}`; sel.appendChild(o); });
+  const rql=$$('#rqLocation'); rql.innerHTML='<option value="">(Todas)</option>';
+  [L1,L2].forEach(l=>{ const o=document.createElement('option'); o.value=l.id; o.textContent=`${l.id} — ${l.name}`; rql.appendChild(o); });
+
   $$('#admDay').valueAsDate=new Date();
+  const f=new Date(); $$('#rqFrom').valueAsDate=new Date(f.getFullYear(), f.getMonth(), 1); $$('#rqTo').valueAsDate=new Date(f.getFullYear(), f.getMonth()+1, 0);
 
   // abrir
-  openTab(isAdmin ? 'general' : 'worker');
-  if(isAdmin) await renderGeneralCalendar();
+  openTab(isAdmin ? 'admin-req' : 'worker');
+  if(isAdmin) await loadAdminRequests();
   renderCalendar(1); renderCalendar(2); updateSelResume();
 }
 
 function onLogout(){ sessionUser=null; profile=null; showAuth(true); }
-async function logout(){ await supabase.auth.signOut(); }
+async function logout(){ await supabase.auth.signOut(); showAuth(true); }
 
 function showAuth(show){
   $$('#auth').classList.toggle('hidden', !show);
@@ -351,7 +414,7 @@ function showAuth(show){
 }
 
 function openTab(name){
-  ['worker','myassign','admin','general'].forEach(n=> $$('#tab-'+n)?.classList.toggle('hidden', n!==name));
+  ['worker','myassign','profile','admin-req','admin-assign','general'].forEach(n=> $$('#tab-'+n)?.classList.toggle('hidden', n!==name));
 }
 
 /* ============== CALENDARIOS WORKER ============== */
@@ -361,7 +424,6 @@ function moveMonth(calId, delta){
   if(cal[calId].m>11){ cal[calId].m=0;  cal[calId].y++; }
   renderCalendar(calId);
 }
-
 function renderCalendar(calId){
   const state = cal[calId];
   const box = $$('#cal'+calId);
@@ -389,7 +451,6 @@ function renderCalendar(calId){
     box.appendChild(div);
   }
 }
-
 function updateSelResume(){
   const c1=[...cal[1].selected].length, c2=[...cal[2].selected].length;
   $$('#selResume').textContent = `Rivadavia: ${c1} día(s) — Yrigoyen: ${c2} día(s)`;
@@ -447,7 +508,7 @@ function genPDFSolicitud({ profile, bloques }){
   const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const labelMes = `${meses[now.getMonth()]} ${now.getFullYear()}`;
   doc.setFont('helvetica','bold'); doc.text('HORARIO DE SERVICIO ORDINARIO:', 14, y);
-  doc.setFont('helvetica','normal'); doc.text('07.00 a 19.00 hs.', 85, y);
+  doc.setFont('helvetica','normal'); doc.text(String(profile.horario_ordinario||'07.00 a 19.00'), 85, y);
   doc.setFont('helvetica','bold'); doc.text('MES', 140, y); doc.setFont('helvetica','normal'); doc.text(labelMes, 150, y); y+=8;
 
   doc.setFont('helvetica','bold'); doc.text('DIAS GUARDIA ADICIONAL',14,y); y+=4;
@@ -497,7 +558,77 @@ async function loadMyAssign(){
   });
 }
 
-/* ============== ADMIN PANEL ============== */
+/* ============== MIS DATOS (perfil) ============== */
+async function loadMyProfile(){
+  const { data } = await supabase.from('profiles').select('*').eq('id', sessionUser.id).maybeSingle();
+  const p = data||{};
+  $$('#pf_full_name').value = p.full_name||'';
+  $$('#pf_dni').value       = p.dni||'';
+  $$('#pf_lp').value        = p.lp||'';
+  $$('#pf_dep_code').value  = p.dep_code||'';
+  $$('#pf_jerarquia').value = p.jerarquia||'';
+  $$('#pf_horario').value   = p.horario_ordinario||'';
+  $$('#pf_phone').value     = p.phone||'';
+  $$('#pf_address').value   = p.address||'';
+  $$('#pf_city').value      = p.city||'';
+  $$('#pf_notes').value     = p.notes||'';
+}
+async function saveMyProfile(){
+  const row = {
+    id: sessionUser.id,
+    full_name: $$('#pf_full_name').value.trim()||null,
+    dni: $$('#pf_dni').value.trim()||null,
+    lp: $$('#pf_lp').value.trim()||null,
+    dep_code: $$('#pf_dep_code').value.trim()||null,
+    jerarquia: $$('#pf_jerarquia').value.trim()||null,
+    horario_ordinario: $$('#pf_horario').value.trim()||null,
+    phone: $$('#pf_phone').value.trim()||null,
+    address: $$('#pf_address').value.trim()||null,
+    city: $$('#pf_city').value.trim()||null,
+    notes: $$('#pf_notes').value.trim()||null
+  };
+  await supabase.from('profiles').upsert(row, { onConflict:'id' });
+  alert('Datos guardados.');
+}
+
+/* ============== ADMIN: SOLICITUDES (nuevo panel) ============== */
+async function loadAdminRequests(){
+  const from=$$('#rqFrom').value, to=$$('#rqTo').value, loc=$$('#rqLocation').value, sh=$$('#rqShift').value, q=$$('#rqSearch').value?.toLowerCase()||'';
+  let req = supabase.from('availabilities').select('day, shift_label, location_id, profiles(full_name)');
+  if(from) req=req.gte('day', from);
+  if(to)   req=req.lte('day', to);
+  if(loc)  req=req.eq('location_id', parseInt(loc));
+  if(sh)   req=req.eq('shift_label', sh);
+  const { data } = await req.order('day');
+
+  const rows = (data||[]).filter(r=> (r.profiles?.full_name||'').toLowerCase().includes(q) );
+  $$('#rqResume').textContent = `${rows.length} solicitud(es)`;
+  const tb=$$('#rqTable'); tb.innerHTML='';
+  rows.forEach(r=>{
+    const tr=document.createElement('tr');
+    const sede = r.location_id===1? 'Rivadavia' : r.location_id===2? 'Yrigoyen' : ('Loc '+r.location_id);
+    tr.innerHTML=`<td class="py-2">${r.day}</td><td>${r.profiles?.full_name||''}</td><td>${sede}</td><td>${r.shift_label}</td>`;
+    tb.appendChild(tr);
+  });
+}
+async function exportRqCSV(){
+  const from=$$('#rqFrom').value, to=$$('#rqTo').value, loc=$$('#rqLocation').value, sh=$$('#rqShift').value, q=$$('#rqSearch').value?.toLowerCase()||'';
+  let req = supabase.from('availabilities').select('day, shift_label, location_id, profiles(full_name)');
+  if(from) req=req.gte('day', from);
+  if(to)   req=req.lte('day', to);
+  if(loc)  req=req.eq('location_id', parseInt(loc));
+  if(sh)   req=req.eq('shift_label', sh);
+  const { data } = await req.order('day');
+  const rows = (data||[]).filter(r=> (r.profiles?.full_name||'').toLowerCase().includes(q) );
+  const csvRows = [['Fecha','Nombre','Ubicación','Turno']].concat(rows.map(r=>[
+    r.day, r.profiles?.full_name||'', r.location_id===1?'Rivadavia':'Yrigoyen', r.shift_label
+  ]));
+  const csv = csvRows.map(r=>r.map(x=>`"${String(x||'').replaceAll('"','""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=`solicitudes_${from||''}_${to||''}.csv`; a.click(); URL.revokeObjectURL(url);
+}
+
+/* ============== ADMIN: ASIGNACIONES (panel existente) ============== */
 async function loadAdminPool(){
   const day=$$('#admDay').value; const location_id=parseInt($$('#admLocation').value); const shift_label=$$('#admShift').value;
   if(!day||!location_id||!shift_label) return alert('Completá filtros');
@@ -523,7 +654,6 @@ async function loadAdminPool(){
     <td class="space-x-2">
       <button class="text-emerald-700" data-confirm="${r.id}">Confirmar</button>
       <button class="text-red-700" data-del="${r.id}">Quitar</button>
-      <button class="btn" data-send="${r.user_id}">Finalizar y enviar</button>
     </td>`;
     as.appendChild(tr);
   });
@@ -531,7 +661,6 @@ async function loadAdminPool(){
   $$$('#pool [data-add]').forEach(b=> b.addEventListener('click', ()=> addAssignment(b.dataset.add, day, location_id, shift_label)));
   $$$('#assigned [data-confirm]').forEach(b=> b.addEventListener('click', async()=>{ await updateAssignmentStatus(parseInt(b.dataset.confirm), 'confirmado'); loadAdminPool(); }));
   $$$('#assigned [data-del]').forEach(b=> b.addEventListener('click', async()=>{ await deleteAssignment(parseInt(b.dataset.del)); loadAdminPool(); }));
-  $$$('#assigned [data-send]').forEach(b=> b.addEventListener('click', ()=> sendAsignacion(b.dataset.send, day, location_id, shift_label)));
 }
 async function addAssignment(user_id, day, location_id, shift_label){
   const { data: cap } = await supabase.from('vacancy_status').select('*').eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label).maybeSingle();
@@ -548,34 +677,6 @@ async function exportCSV(){
   const csv = rows.map(r=>r.map(x=>`"${String(x||'').replaceAll('"','""')}"`).join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob);
   const a=document.createElement('a'); a.href=url; a.download=`asignaciones_${day}_${location_id}_${shift_label}.csv`; a.click(); URL.revokeObjectURL(url);
-}
-
-/* ======= PDF: ASIGNACIÓN (simple con firma digital textual) ======= */
-async function sendAsignacion(user_id, day, location_id, shift_label){
-  const { data: prof } = await supabase.from('profiles').select('*').eq('id', user_id).maybeSingle();
-  const { data: rows } = await supabase.from('assignments').select('day,shift_label,status,locations(name)').eq('user_id',user_id).eq('day',day).eq('location_id',location_id).eq('shift_label',shift_label).in('status',['propuesto','confirmado']).order('day');
-
-  const { jsPDF } = window.jspdf; const doc = new jsPDF();
-  headerPDF(doc, 'ASIGNACIÓN DE SERVICIOS');
-  let y=36;
-  kv(doc,'Nombre',prof?.full_name,14,y);  y+=6;
-  kv(doc,'DNI',prof?.dni,14,y);           y+=6;
-  kv(doc,'CUIL',prof?.cuil,14,y);         y+=6;
-  kv(doc,'Email',prof?.email,14,y);       y+=10;
-
-  doc.setFont('helvetica','bold'); doc.text('DETALLE DE ASIGNACIONES', 14, y); y+=6;
-  doc.setFont('helvetica','normal');
-  (rows||[]).forEach(r=>{
-    doc.text(`• ${r.day} — ${r.locations?.name||''} — ${r.shift_label} — Estado: ${r.status}`, 14, y);
-    y+=6;
-  });
-
-  y+=10;
-  doc.text(`Firmado digitalmente por AGN — ${iso(new Date())}`, 14, y); y+=6;
-  doc.text('Este documento fue generado automáticamente por el sistema.', 14, y);
-
-  const fname = `ASIGNACION_${(prof?.full_name||'usuario').replace(/\s+/g,'_')}_${day}.pdf`;
-  doc.save(fname);
 }
 
 /* ============== CALENDARIO GENERAL (ADMIN) ============== */
