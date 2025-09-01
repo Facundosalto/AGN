@@ -275,13 +275,31 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.vacancy_status_range(date, date, int, text) TO authenticated;
 
+-- Campos que usa la app en profiles (idempotente)
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS dni TEXT,
   ADD COLUMN IF NOT EXISTS cuil TEXT,
-  ADD COLUMN IF NOT EXISTS phone TEXT,
+  ADD COLUMN IF NOT EXISTS lp TEXT,
+  ADD COLUMN IF NOT EXISTS dep_code TEXT,
+  ADD COLUMN IF NOT EXISTS jerarquia TEXT,
+  ADD COLUMN IF NOT EXISTS horario_ordinario TEXT,
   ADD COLUMN IF NOT EXISTS address TEXT,
   ADD COLUMN IF NOT EXISTS city TEXT,
   ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- Políticas: permitir que ADMIN lea/escriba profiles
+DROP POLICY IF EXISTS profiles_admin_rw ON public.profiles;
+CREATE POLICY profiles_admin_rw ON public.profiles
+  FOR ALL
+  USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin'))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin'));
+
+-- (Opcional) Promover un usuario a admin por email
+-- 1) Buscá el id en auth.users:
+-- SELECT id, email FROM auth.users WHERE email = 'TU_CORREO@ejemplo.com';
+-- 2) Con ese id, marcá admin:
+-- UPDATE public.profiles SET role='admin' WHERE id = 'EL_ID_DEL_PASO_1';
+
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS cuil TEXT;
 
