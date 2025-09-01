@@ -9,29 +9,42 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root{color-scheme:light}
-    body{background:#f7fafc}
-    .card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 10px 24px rgba(0,0,0,.06)}
-    .chip{display:inline-block;padding:2px 10px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px}
+    body{
+      background: radial-gradient(1200px 800px at -10% -20%, #dbeafe 0, transparent 60%), radial-gradient(1000px 600px at 110% 10%, #e0e7ff 0, transparent 60%), #f6f9fc;
+    }
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:18px;box-shadow:0 14px 30px rgba(2,6,23,.08)}
+    .chip{display:inline-block;padding:6px 12px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px;background:#f8fafc}
     .tab{cursor:pointer}
     .badge{display:inline-block;padding:.2rem .5rem;border-radius:999px;border:1px solid #e5e7eb}
-    .input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:10px;background:#fff}
-    .btn{padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
-    .btn-primary{padding:10px 12px;border-radius:10px;background:#0f172a;color:#fff}
+    .input{width:100%;padding:12px 14px;border:1px solid #cbd5e1;border-radius:12px;background:#fff}
+    .btn{padding:12px 14px;border:1px solid #cbd5e1;border-radius:12px;background:linear-gradient(#ffffff,#eef2ff);box-shadow:0 6px 0 #c7d2fe;transform:translateY(0);transition:.15s}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 7px 0 #c7d2fe}
+    .btn:active{transform:translateY(1px);box-shadow:0 4px 0 #c7d2fe}
+    .btn-primary{padding:12px 14px;border-radius:12px;background:linear-gradient(180deg,#1e40af,#0f172a);color:#fff;box-shadow:0 6px 0 #0b1223;border:1px solid #0b1223}
+    .btn-primary:hover{filter:brightness(1.05)}
     .calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
-    .cal-head,.cal-cell{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:8px;min-height:64px}
+    .cal-head,.cal-cell{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:8px;min-height:64px}
     .cal-head{font-weight:600;text-align:center;background:#f8fafc}
     .cal-cell .d{font-weight:600}
     .cal-cell.disabled{opacity:.4;pointer-events:none}
     .cal-cell.clickable{cursor:pointer;outline:2px solid transparent}
-    .cal-cell.clickable:hover{outline-color:#0ea5e9}
+    .cal-cell.clickable:hover{outline-color:#2563eb}
     .badge-ok{background:#ecfdf5;border-color:#10b981}
     .badge-zero{background:#fef2f2;border-color:#ef4444}
+    .secure{
+      background:linear-gradient(90deg,#e0f2fe,#e0e7ff);
+      border:1px solid #bfdbfe;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.7);
+    }
   </style>
 </head>
 <body class="min-h-screen">
   <div class="max-w-7xl mx-auto p-4 md:p-8">
     <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <h1 class="text-2xl font-bold">CRM Vacantes — Supabase</h1>
+      <div>
+        <h1 class="text-2xl font-bold">CRM Vacantes — Supabase</h1>
+        <p class="mt-1 text-sm text-slate-600 secure inline-block px-3 py-1 rounded-lg">🔒 Datos protegidos: autenticación Supabase + RLS activo. Solo ves lo que tu rol permite.</p>
+      </div>
       <div id="userBox" class="hidden items-center gap-3">
         <span id="userName" class="chip"></span>
         <button id="logoutBtn" class="btn">Salir</button>
@@ -58,9 +71,10 @@
         <button data-tab="worker"    class="tab btn">Mi disponibilidad</button>
         <button data-tab="myassign"  class="tab btn">Mis asignaciones</button>
         <button data-tab="admin"     class="tab btn hidden" id="btnTabAdmin">Panel Admin</button>
+        <button data-tab="history"   class="tab btn hidden" id="btnTabHistory">Historial</button>
       </nav>
 
-      <!-- DASHBOARD (solo admin) -->
+      <!-- DASHBOARD -->
       <div id="tab-dashboard" class="card p-6 hidden">
         <h2 class="text-lg font-semibold mb-4">Dashboard</h2>
         <div class="grid md:grid-cols-5 gap-3 mb-4">
@@ -85,7 +99,7 @@
         <div class="calendar" id="calendar"></div>
       </div>
 
-      <!-- WORKER: Disponibilidad -->
+      <!-- WORKER -->
       <div id="tab-worker" class="card p-6 hidden">
         <h2 class="text-lg font-semibold mb-4">Cargar disponibilidad</h2>
         <form id="availForm" class="grid md:grid-cols-4 gap-3">
@@ -110,7 +124,7 @@
         </div>
       </div>
 
-      <!-- WORKER: Mis asignaciones -->
+      <!-- MIS ASIGNACIONES -->
       <div id="tab-myassign" class="card p-6 hidden">
         <h2 class="text-lg font-semibold mb-4">Mis asignaciones</h2>
         <table class="w-full text-sm">
@@ -119,7 +133,7 @@
         </table>
       </div>
 
-      <!-- ADMIN PANEL -->
+      <!-- ADMIN -->
       <div id="tab-admin" class="card p-6 hidden">
         <h2 class="text-lg font-semibold mb-4">Panel de administración</h2>
         <div class="grid md:grid-cols-5 gap-3 mb-4">
@@ -158,27 +172,58 @@
           <button id="btnExport" class="btn">Exportar CSV (día)</button>
         </div>
       </div>
+
+      <!-- HISTORIAL (ADMIN) -->
+      <div id="tab-history" class="card p-6 hidden">
+        <h2 class="text-lg font-semibold mb-4">Historial por persona</h2>
+        <div class="grid md:grid-cols-6 gap-3 mb-3">
+          <input id="histName" class="input md:col-span-2" placeholder="Buscar por nombre o email…" />
+          <input id="histFrom" type="date" class="input" />
+          <input id="histTo" type="date" class="input" />
+          <select id="histKind" class="input">
+            <option value="">(Todo)</option>
+            <option value="disponibilidad">Disponibilidades</option>
+            <option value="asignacion">Asignaciones</option>
+          </select>
+          <button id="btnHistSearch" class="btn">Buscar</button>
+        </div>
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-sm text-slate-600" id="histResume">—</div>
+          <div class="flex items-center gap-2">
+            <button id="histPrev" class="btn">◀</button>
+            <span id="histPage" class="text-sm text-slate-600"></span>
+            <button id="histNext" class="btn">▶</button>
+          </div>
+        </div>
+        <table class="w-full text-sm">
+          <thead><tr class="text-left">
+            <th class="py-2">Fecha</th><th>Tipo</th><th>Nombre</th><th>Email</th><th>Ubicación</th><th>Turno</th><th>Estado</th>
+          </tr></thead>
+          <tbody id="histBody"></tbody>
+        </table>
+      </div>
     </section>
   </div>
 
 <script>
-/* ============== CONFIG SUPABASE ============== */
+/* ===== SUPABASE ===== */
 const SUPABASE_URL = "https://atmcrlvaqmfulmujftrd.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0bWNybHZhcW1mdWxtdWpmdHJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyNDc5NjgsImV4cCI6MjA3MTgyMzk2OH0.ib1A6TlmEoqgPNnOdRh6ZQ0m_3dYrqAxSxCsr6yNoeM";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* ============== UTILS ============== */
+/* ===== UTILS ===== */
 const $$ = (s, el=document) => el.querySelector(s);
 const $$$ = (s, el=document) => Array.from(el.querySelectorAll(s));
 function iso(d){ return new Date(d).toISOString().slice(0,10); }
-function setTab(name){ ['dashboard','worker','admin','myassign'].forEach(n=> $$('#tab-'+n)?.classList.toggle('hidden', n!==name)); }
+function setTab(name){ ['dashboard','worker','admin','myassign','history'].forEach(n=> $$('#tab-'+n)?.classList.toggle('hidden', n!==name)); }
 function monthTitle(y,m){ return ['Enero','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m]+' '+y; }
 function firstCell(y,m){ const f=new Date(y,m,1); const dow=(f.getDay()+6)%7; const s=new Date(f); s.setDate(f.getDate()-dow); return s; }
 
-/* ============== STATE ============== */
-let user=null, profile=null, chart=null, calY=new Date().getFullYear(), calM=new Date().getMonth();
+/* ===== STATE ===== */
+let user=null, profile=null, calY=new Date().getFullYear(), calM=new Date().getMonth();
+let histPage=1, histTotal=0, histPerPage=200;
 
-/* ============== INIT ============== */
+/* ===== INIT ===== */
 (async function(){
   $$('#signInBtn').addEventListener('click', (e)=>auth(e,false));
   $$('#signUpBtn').addEventListener('click', (e)=>auth(e,true));
@@ -189,34 +234,38 @@ let user=null, profile=null, chart=null, calY=new Date().getFullYear(), calM=new
     if(t==='dashboard') loadDashboard();
     if(t==='worker')    loadMyAvail();
     if(t==='myassign')  loadMyAssign();
+    if(t==='history')   loadHistory(1);
   }));
 
-  $$('#saveAvail').addEventListener('click', saveAvailability);
-  $$('#btnLoadPool').addEventListener('click', loadAdminPool);
-  $$('#btnPropose').addEventListener('click', proposeAuto);
-  $$('#btnConfirmAll').addEventListener('click', confirmAll);
-  $$('#btnExport').addEventListener('click', exportCSV);
+  $$('#availForm')?.addEventListener('submit', saveAvailability);
+  $$('#btnLoadPool')?.addEventListener('click', loadAdminPool);
+  $$('#btnPropose')?.addEventListener('click', proposeAuto);
+  $$('#btnConfirmAll')?.addEventListener('click', confirmAll);
+  $$('#btnExport')?.addEventListener('click', exportCSV);
 
   $$('#btnDashLoad').addEventListener('click', loadDashboard);
   $$('#calPrev').addEventListener('click', ()=>{ calM--; if(calM<0){calM=11;calY--;} renderCalendar(); });
   $$('#calNext').addEventListener('click', ()=>{ calM++; if(calM>11){calM=0;calY++;} renderCalendar(); });
+
+  // Historial listeners
+  $$('#btnHistSearch').addEventListener('click', ()=> loadHistory(1));
+  $$('#histPrev').addEventListener('click', ()=> { if(histPage>1){ histPage--; loadHistory(histPage); } });
+  $$('#histNext').addEventListener('click', ()=> { const pages=Math.ceil(histTotal/histPerPage)||1; if(histPage<pages){ histPage++; loadHistory(histPage);} });
 
   const { data:{ session } } = await supabase.auth.getSession();
   if(session?.user) await onLogin(session.user); else { $$('#auth').classList.remove('hidden'); }
   supabase.auth.onAuthStateChange(async(_e,s)=>{ if(s?.user) await onLogin(s.user); else onLogout(); });
 })();
 
-/* ============== AUTH ============== */
+/* ===== AUTH ===== */
 async function auth(e, signup=false){
   e.preventDefault();
   const email=$$('#email').value.trim(), password=$$('#password').value.trim(), msg=$$('#authMsg');
   if(!email||!password){ msg.textContent='Completá email y contraseña'; msg.className='text-red-600'; return; }
   const fn = signup ? supabase.auth.signUp : supabase.auth.signInWithPassword;
-  const res = signup
-    ? await fn({ email, password, options:{ data:{ full_name: email.split('@')[0] } } })
-    : await fn({ email, password });
+  const res = signup ? await fn({ email, password, options:{ data:{ full_name: email.split('@')[0] } } }) : await fn({ email, password });
   if(res.error){ msg.textContent=res.error.message; msg.className='text-red-600'; return; }
-  msg.textContent = signup ? 'Cuenta creada.' : 'Ingreso correcto.'; msg.className='text-emerald-600';
+  msg.textContent = signup? 'Cuenta creada.' : 'Ingreso correcto.'; msg.className='text-emerald-600';
 }
 
 async function onLogin(u){
@@ -225,13 +274,12 @@ async function onLogin(u){
   profile = data||{};
   $$('#userBox').classList.remove('hidden');
   $$('#userName').textContent = `${u.email} — rol: ${profile.role||'worker'}`;
-  $$('#auth').classList.add('hidden');
-  $$('#app').classList.remove('hidden');
+  $$('#auth').classList.add('hidden'); $$('#app').classList.remove('hidden');
 
-  // mostrar tabs segun rol
   const isAdmin = profile?.role === 'admin';
   $$('#btnTabAdmin').classList.toggle('hidden', !isAdmin);
   $$('#btnTabDash').classList.toggle('hidden', !isAdmin);
+  $$('#btnTabHistory').classList.toggle('hidden', !isAdmin);
 
   // cargar selects
   const { data: locs } = await supabase.from('locations').select('*').order('id');
@@ -241,10 +289,11 @@ async function onLogin(u){
     (locs||[]).forEach(l=>{ const o=document.createElement('option'); o.value=l.id; o.textContent=`${l.id} — ${l.name}`; sel.appendChild(o); });
   });
 
-  // fechas por defecto
+  // fechas
   const t=new Date(); $$('#from').valueAsDate=t; $$('#to').valueAsDate=t; $$('#admDay').valueAsDate=t;
   const f=new Date(t.getFullYear(), t.getMonth(), 1), to=new Date(t.getFullYear(), t.getMonth()+1, 0);
   $$('#dashFrom').valueAsDate=f; $$('#dashTo').valueAsDate=to;
+  $$('#histFrom').valueAsDate=f; $$('#histTo').valueAsDate=to;
 
   setTab(isAdmin ? 'dashboard' : 'worker');
   if(isAdmin) await loadDashboard();
@@ -254,7 +303,7 @@ async function onLogin(u){
 async function onLogout(){ user=null; profile=null; $$('#app').classList.add('hidden'); $$('#auth').classList.remove('hidden'); }
 async function logout(){ await supabase.auth.signOut(); }
 
-/* ============== WORKER ============== */
+/* ===== WORKER ===== */
 async function saveAvailability(e){
   e.preventDefault();
   const location_id=parseInt($$('#location').value), shift_label=$$('#shift').value;
@@ -271,7 +320,7 @@ async function loadMyAvail(){
   const tb=$$('#myAvail'); tb.innerHTML='';
   (data||[]).forEach(r=>{
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td class="py-2">${r.day}</td><td>${r.locations?.id} — ${r.locations?.name||''}</td><td>${r.shift_label}</td><td><button class="text-red-600" data-del="${r.id}">Eliminar</button></td>`;
+    tr.innerHTML=`<td class="py-2">${r.day}</td><td>${r.locations?.id} — ${r.locations?.name||''}</td><td>${r.shift_label}</td><td><button class="btn text-red-600" data-del="${r.id}">Eliminar</button></td>`;
     tb.appendChild(tr);
   });
   $$$('#myAvail [data-del]').forEach(btn=> btn.addEventListener('click', async ()=>{ await supabase.from('availabilities').delete().eq('id', btn.dataset.del); await loadMyAvail(); }));
@@ -287,7 +336,7 @@ async function loadMyAssign(){
   });
 }
 
-/* ============== ADMIN ============== */
+/* ===== ADMIN ===== */
 async function loadAdminPool(){
   const day=$$('#admDay').value, location_id=parseInt($$('#admLocation').value), shift_label=$$('#admShift').value;
   if(!day||!location_id||!shift_label) return alert('Completá filtros');
@@ -356,7 +405,7 @@ async function exportCSV(){
   const a=document.createElement('a'); a.href=url; a.download=`asignaciones_${day}_${location_id}_${shift_label}.csv`; a.click(); URL.revokeObjectURL(url);
 }
 
-/* ============== DASHBOARD ============== */
+/* ===== DASHBOARD ===== */
 async function loadDashboard(){
   const from=$$('#dashFrom').value, to=$$('#dashTo').value, loc=$$('#dashLocation').value, sh=$$('#dashShift').value;
   let q=supabase.from('vacancy_status').select('*').gte('day',from).lte('day',to);
@@ -368,12 +417,10 @@ async function loadDashboard(){
   const ocup=(data||[]).reduce((a,b)=>a+(b.ocupados||0),0);
   const disp=(data||[]).reduce((a,b)=>a+(b.disponibles||0),0);
   $$('#dashKpis').innerHTML = `
-    <div class="card p-4"><div class="text-slate-500">Cupos</div><div class="text-2xl font-bold">${cupos}</div></div>
-    <div class="card p-4"><div class="text-slate-500">Ocupados</div><div class="text-2xl font-bold">${ocup}</div></div>
-    <div class="card p-4"><div class="text-slate-500">Disponibles</div><div class="text-2xl font-bold">${disp}</div></div>
+    <div class="card p-4 text-center"><div class="text-slate-500 text-sm">Cupos</div><div class="text-2xl font-bold">${cupos}</div></div>
+    <div class="card p-4 text-center"><div class="text-slate-500 text-sm">Ocupados</div><div class="text-2xl font-bold">${ocup}</div></div>
+    <div class="card p-4 text-center"><div class="text-slate-500 text-sm">Disponibles</div><div class="text-2xl font-bold">${disp}</div></div>
   `;
-
-  // preparar calendario con sede/turno seleccionados
   renderCalendar();
 }
 
@@ -403,7 +450,6 @@ function renderCalendar(){
       if(inMonth && disp>0 && loc && sh){
         cell.classList.add('clickable');
         cell.addEventListener('click', ()=>{
-          // precarga para alta rápida
           setTab('worker');
           $$('#from').value = key; $$('#to').value = key;
           $$('#location').value = String(loc); $$('#shift').value = sh;
@@ -411,6 +457,51 @@ function renderCalendar(){
       }
       cal.appendChild(cell);
     });
+  });
+}
+
+/* ===== HISTORIAL (TODOS LOS MOVIMIENTOS) ===== */
+async function loadHistory(page=1){
+  const term = ($$('#histName').value||'').trim();
+  const from = $$('#histFrom').value || null;
+  const to   = $$('#histTo').value   || null;
+  const kind = $$('#histKind').value || '';
+
+  let q = supabase.from('v_user_activity')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false });
+
+  if(term){
+    // buscar por nombre o email
+    q = q.or(`full_name.ilike.%${term}%,email.ilike.%${term}%`);
+  }
+  if(from) q = q.gte('day', from);
+  if(to)   q = q.lte('day', to);
+  if(kind) q = q.eq('kind', kind);
+
+  // paginación (para traer TODO sin cortar)
+  histPage = page;
+  const fromIdx = (page-1)*histPerPage;
+  const toIdx   = fromIdx + histPerPage - 1;
+  const { data, count, error } = await q.range(fromIdx, toIdx);
+  if(error) { console.error(error); return; }
+  histTotal = count||0;
+
+  $$('#histResume').textContent = `${count||0} movimiento(s)`;
+  const pages = Math.max(1, Math.ceil((count||0)/histPerPage));
+  $$('#histPage').textContent = `Página ${page} / ${pages}`;
+
+  const tb = $$('#histBody'); tb.innerHTML = '';
+  (data||[]).forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td class="py-2">${r.day}</td>
+      <td>${r.kind}</td>
+      <td>${r.full_name||''}</td>
+      <td>${r.email||''}</td>
+      <td>${r.location_id} — ${r.location_name||''}</td>
+      <td>${r.shift_label||''}</td>
+      <td>${r.status||''}</td>`;
+    tb.appendChild(tr);
   });
 }
 </script>
